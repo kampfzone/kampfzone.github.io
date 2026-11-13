@@ -7,36 +7,58 @@
 <style>
   html, body { margin: 0; height: 100%; background: #0b0d10; color: #eee; font: 16px/1.4 system-ui, -apple-system, sans-serif; }
   #wrap { display: flex; flex-direction: column; height: 100%; }
-  video { flex: 1; width: 100%; min-height: 0; object-fit: cover; background: #000; }
-  #bar { padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); background: #15181d; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  button { font: 700 16px system-ui, sans-serif; border: 0; border-radius: 10px; padding: 12px 16px; background: #ffcc33; color: #111; }
+  #view { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; background: #000; }
+  #cv { max-width: 100%; max-height: 100%; }
+  #v { position: fixed; left: 0; top: 0; width: 2px; height: 2px; opacity: 0.01; pointer-events: none; }
+  #bar { padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: #15181d; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button { font: 700 15px system-ui, sans-serif; border: 0; border-radius: 10px; padding: 11px 13px; background: #ffcc33; color: #111; }
   button.sec { background: #2b3038; color: #eee; }
-  #st { flex: 1 1 100%; font-size: 15px; }
+  #st { flex: 1 1 100%; font-size: 14px; }
   .ok { color: #7dff7a; } .bad { color: #ff6b5a; }
-  #code { font: 700 22px system-ui; letter-spacing: 3px; width: 6.5em; text-transform: uppercase; padding: 8px 10px; border-radius: 8px; border: 0; }
+  #code { font: 700 20px system-ui; letter-spacing: 3px; width: 5.5em; text-transform: uppercase; padding: 8px 10px; border-radius: 8px; border: 0; }
 </style>
 </head>
 <body>
 <div id="wrap">
-  <video id="v" playsinline autoplay muted></video>
+  <div id="view"><canvas id="cv" width="1280" height="720"></canvas></div>
   <div id="bar">
-    <div id="st">Handy <b>quer</b> halten und aufs Lenkrad richten. Dann „Kamera starten“.</div>
+    <div id="st">Handy <b>quer</b> hinstellen und aufs Lenkrad richten. Dann „Kamera starten“. Das Bild oben ist genau das, was im Video landet.</div>
     <input id="code" placeholder="CODE" maxlength="6" autocomplete="off">
     <button id="go">📷 Kamera starten</button>
-    <button id="flip" class="sec">🔄 Kamera wechseln</button>
+    <button id="rot" class="sec">↻ Drehen</button>
+    <button id="flip" class="sec">🔄 Kamera</button>
   </div>
 </div>
+<video id="v" playsinline autoplay muted></video>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
-// Handy als Lenkrad-Kamera für Kampfzone: Bild geht per WebRTC (direkt im WLAN) an den PC, das Spiel setzt es unter das Spielbild
+// Handy als Lenkrad-Kamera für Kampfzone. Das Kamerabild wird hier auf eine Leinwand gezeichnet (gerade, im richtigen
+// Seitenverhältnis, auf Wunsch gedreht) und diese Leinwand geschickt – so kommt es am PC nie verzerrt oder gekippt an.
 const PEER_OPTS = { config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:global.stun.twilio.com:3478' }] } };
 const $ = id => document.getElementById(id), st = (t, c) => { $('st').className = c || ''; $('st').innerHTML = t; };
 const q = new URLSearchParams(location.search); if (q.get('c')) $('code').value = q.get('c').toUpperCase();
-let stream = null, facing = 'environment', peer = null, call = null, wake = null;
+const v = $('v'), cv = $('cv'), g = cv.getContext('2d');
+let cam = null, facing = 'environment', rot = 0, peer = null, call = null, out = null, loop = 0;
+try { rot = +localStorage.getItem('kzcam_rot') || 0; } catch (e) {}
+// Kamerabild → Leinwand (Querformat 16:9; Hochkant-Bilder werden mittig ausgeschnitten, nie gestaucht)
+function draw() {
+  const vw = v.videoWidth, vh = v.videoHeight;
+  if (vw && vh) {
+    const W = cv.width, H = cv.height, side = rot % 180 !== 0, iw = side ? vh : vw, ih = side ? vw : vh;   // Bildgröße nach dem Drehen
+    const sc = Math.max(W / iw, H / ih);
+    g.save(); g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    g.translate(W / 2, H / 2); g.rotate(rot * Math.PI / 180);
+    g.drawImage(v, -vw * sc / 2, -vh * sc / 2, vw * sc, vh * sc);
+    g.restore();
+  }
+  loop = requestAnimationFrame(draw);
+}
 async function camera() {
-  if (stream) stream.getTracks().forEach(t => t.stop());
-  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, audio: false });
-  $('v').srcObject = stream;
+  if (cam) cam.getTracks().forEach(t => t.stop());
+  cam = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, audio: false });
+  v.srcObject = cam; await v.play().catch(() => {});
+  if (!loop) draw();
+  if (!out) out = cv.captureStream(30);
 }
 function connect() {
   const code = $('code').value.trim().toUpperCase();
@@ -44,13 +66,12 @@ function connect() {
   if (call) try { call.close(); } catch (e) {}
   const go = () => {
     st('Verbinde mit dem PC …');
-    call = peer.call('kz-cam-' + code, stream);
+    call = peer.call('kz-cam-' + code, out);
     if (!call) { st('Verbindung fehlgeschlagen – Code richtig?', 'bad'); return; }
     let ok = false;
-    call.on('stream', () => {});
     const t = setInterval(() => {
       const pc = call.peerConnection;
-      if (pc && (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed')) { ok = true; clearInterval(t); st('✅ Mit dem PC verbunden – das Bild ist jetzt im Spiel. Bildschirm bleibt an.', 'ok'); }
+      if (pc && (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed')) { ok = true; clearInterval(t); st('✅ Mit dem PC verbunden. Bild schief? „↻ Drehen“ antippen. Bildschirm bleibt an.', 'ok'); }
       if (pc && (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected')) { clearInterval(t); st('❌ Verbindung abgebrochen – Handy und PC im selben WLAN? Nochmal „Kamera starten“.', 'bad'); }
     }, 500);
     setTimeout(() => { if (!ok) { clearInterval(t); st('❌ Keine Verbindung – ist am PC das Fenster „Lenkrad-Kamera“ offen und der Code richtig?', 'bad'); } }, 20000);
@@ -61,13 +82,11 @@ function connect() {
 }
 $('go').onclick = async () => {
   try { await camera(); } catch (e) { st('❌ Kamera nicht erlaubt – in den Einstellungen für Safari die Kamera erlauben und neu laden.', 'bad'); return; }
-  try { if ('wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); } catch (e) {}
+  try { if ('wakeLock' in navigator) await navigator.wakeLock.request('screen'); } catch (e) {}
   connect();
 };
-$('flip').onclick = async () => {
-  facing = facing === 'environment' ? 'user' : 'environment';
-  try { await camera(); if (call && call.peerConnection) { const s = call.peerConnection.getSenders().find(x => x.track && x.track.kind === 'video'); if (s) s.replaceTrack(stream.getVideoTracks()[0]); } } catch (e) {}
-};
+$('rot').onclick = () => { rot = (rot + 90) % 360; try { localStorage.setItem('kzcam_rot', rot); } catch (e) {} };
+$('flip').onclick = async () => { facing = facing === 'environment' ? 'user' : 'environment'; try { await camera(); } catch (e) {} };
 </script>
 </body>
 </html>
