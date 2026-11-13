@@ -1,0 +1,785 @@
+'use strict';
+const $ = id => document.getElementById(id);
+const PREFIX = 'kampfzone-arena-v1-';
+// Handy/Tablet erkennen (Touchscreen ohne Maus) → Touch-Steuerung statt Maus & Tastatur
+const TOUCH = matchMedia('(pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && matchMedia('(hover: none)').matches);
+if (TOUCH) document.body.classList.add('touch');
+
+/* Update-Prüfung: beim Veröffentlichen wird 20261113-171038 durch eine Versionsnummer ersetzt */
+const BUILD = '20261113-171038';
+// Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
+// Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
+const UPD = { newer: null };
+const buildLabel = b => { const m = /^(\d{4})(\d\d)(\d\d)-(\d\d)(\d\d)/.exec(b || ''); return m ? `${m[3]}.${m[2]}. ${m[4]}:${m[5]} Uhr` : 'lokal'; };
+function freshReload(b) { const u = new URL(location.href); u.searchParams.set('u', b || String(Date.now())); location.replace(u.toString()); }
+function verLabel() {
+  const el = document.getElementById('verInfo'); if (!el) return;
+  el.innerHTML = UPD.newer ? `⚠ Neue Version verfügbar (${buildLabel(UPD.newer)}) – <u>jetzt laden</u>` : `Version ${buildLabel(BUILD)} · ${UPD.checked ? '✓ aktuell' : 'wird geprüft …'}`;
+  el.style.color = UPD.newer ? '#ffcc33' : '';
+}
+async function checkUpdate(manual) {
+  if (BUILD.startsWith('__') || !location.protocol.startsWith('http')) return;
+  try {
+    const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    const j = await r.json(); UPD.checked = true;
+    if (j.build && j.build !== BUILD) {
+      UPD.newer = j.build;
+      let inGame = false; try { inGame = typeof running !== 'undefined' && running; } catch (e) {}
+      let done = null; try { done = sessionStorage.getItem('kz_autoupd'); } catch (e) {}
+      if (manual || (!inGame && done !== j.build)) { try { sessionStorage.setItem('kz_autoupd', j.build); } catch (e) {} return freshReload(j.build); }   // im Menü: sofort laden (einmal pro Version)
+      document.getElementById('updateBar').classList.remove('hidden');
+    }
+  } catch (e) {}
+  verLabel();
+}
+checkUpdate(); setInterval(checkUpdate, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
+addEventListener('pageshow', e => { if (e.persisted) checkUpdate(); });   // Seite aus dem Zwischenspeicher zurückgeholt (Handy)
+addEventListener('focus', () => checkUpdate());
+document.getElementById('btnUpdate').onclick = () => freshReload(UPD.newer);
+{ const vi = document.getElementById('verInfo');   // Versionszeile im Menü: antippen = nach Update suchen
+  if (vi) vi.onclick = () => { if (UPD.newer) return freshReload(UPD.newer); UPD.checked = false; verLabel(); checkUpdate(true); };
+  verLabel(); }
+// Gewählte Karte: „tokio“ (Standard) oder „hafen“ (alte Karte). Wird beim Laden festgelegt; Wechsel = Seite neu laden.
+const MAP_ID = (() => {
+  let m = 'tokio';
+  try { m = new URLSearchParams(location.search).get('map') || localStorage.getItem('kz_map') || 'tokio'; } catch (e) {}
+  return m === 'hafen' || m === 'welt' ? m : 'tokio';
+})();
+// Karte wechseln (im Menü) bzw. auf die Karte des Hosts umschalten: Seite mit ?map=… neu laden
+function switchMap(id, joinCode) {
+  try { localStorage.setItem('kz_map', id); if (joinCode) sessionStorage.setItem('kz_autojoin', joinCode); } catch (e) {}
+  const u = new URL(location.href); u.searchParams.set('map', id); if (joinCode) u.hash = joinCode;
+  location.replace(u.toString());
+}
+document.getElementById('mapIn').value = MAP_ID;
+document.getElementById('mapIn').onchange = e => { document.getElementById('menuMsg').textContent = 'Karte wird geladen …'; switchMap(e.target.value); };
+const KILL_LIMIT = 25;
+const PR = 0.38, PH = 1.85, EYE = 1.65, STEP = 0.8, GRAV = 24;
+const COLORS = ['#e74c3c','#3498db','#2ecc71','#f1c40f','#9b59b6','#e67e22','#1abc9c','#ff6fb5','#ecf0f1','#a0522d','#00e5ff','#c0ff33'];
+const BOT_NAMES = ['Rex','Blitz','Kobra','Falke','Wolf','Titan','Viper','Echo','Panzer','Jäger'];
+
+const WEAPONS = [
+  { name:'Sturmgewehr', short:'AR', dmg:20, head:2,   rate:0.1,  mag:30, reload:1.8, spread:0.01,  move:0.035, pellets:1, auto:true,  kick:0.012, zoom:55, snd:[1400,0.09] },
+  { name:'Schrotflinte',short:'SG', dmg:12, head:1.5, rate:0.85, mag:6,  reload:2.2, spread:0.075, move:0.03,  pellets:9, auto:false, kick:0.06,  zoom:60, snd:[700,0.22] },
+  { name:'Scharfschützengewehr', short:'SR', dmg:95, head:2.5, rate:1.3, mag:5, reload:2.6, spread:0.07, move:0.05, pellets:1, auto:false, kick:0.07, zoom:22, scope:true, snd:[500,0.3] },
+  { name:'Pistole',     short:'P',  dmg:26, head:2,   rate:0.2,  mag:12, reload:1.3, spread:0.008, move:0.02,  pellets:1, auto:false, kick:0.025, zoom:60, snd:[1800,0.08] },
+  // Ab hier: Waffen aus dem Waffenladen (je 10.000 Coins)
+  { name:'Maschinenpistole', short:'MP', dmg:15, head:1.8, rate:0.065, mag:35, reload:1.6, spread:0.02, move:0.02, pellets:1, auto:true, kick:0.009, zoom:60, snd:[1700,0.07], price:10000,
+    desc:'Sehr schnelles Dauerfeuer – stark auf kurze Distanz.' },
+  { name:'Revolver', short:'REV', dmg:55, head:2.2, rate:0.5, mag:6, reload:2.0, spread:0.006, move:0.02, pellets:1, auto:false, kick:0.07, zoom:55, snd:[850,0.22], price:10000,
+    desc:'Riesiger Schaden pro Schuss – zwei Treffer reichen.' },
+  { name:'Kampfgewehr', short:'KG', dmg:40, head:2.2, rate:0.25, mag:15, reload:2.2, spread:0.025, move:0.04, pellets:1, auto:false, kick:0.035, zoom:35, scope:true, snd:[1100,0.15], price:10000,
+    desc:'Präzise mit Zielfernrohr, schneller als das Scharfschützengewehr.' },
+  { name:'Maschinengewehr', short:'MG', dmg:22, head:1.8, rate:0.085, mag:80, reload:3.6, spread:0.025, move:0.06, pellets:1, auto:true, kick:0.014, zoom:55, snd:[1200,0.11], price:10000,
+    desc:'80 Schuss im Magazin – Dauerfeuer ohne Ende.' },
+  // Günstige Einsteiger-Waffe
+  { name:'Doppelflinte', short:'DF', dmg:11, head:1.5, rate:0.3, mag:2, reload:2.4, spread:0.085, move:0.03, pellets:10, auto:false, kick:0.075, zoom:60, snd:[600,0.25], price:1000,
+    desc:'Zwei Läufe, zwei schnelle Schüsse – brutal aus nächster Nähe. Nur 1.000 Coins!' },
+  // Schwere Waffen (9–12)
+  { name:'Minigun', short:'MINI', dmg:9, head:1.5, rate:0.04, mag:200, reload:5.0, spread:0.045, move:0.02, pellets:1, auto:true, kick:0.004, zoom:62, snd:[1300,0.05], price:25000,
+    spin:0.6, heavy:0.7, desc:'6 rotierende Läufe, 200 Schuss Dauerfeuer – braucht kurz Anlauf und macht dich langsam.' },
+  { name:'Raketenwerfer', short:'RPG', dmg:0, head:1, rate:1.0, mag:1, reload:2.8, spread:0.004, move:0.02, pellets:1, auto:false, kick:0.1, zoom:50, snd:[260,0.45], price:30000,
+    rocket:true, heavy:0.85, noShell:true, desc:'Rakete mit großer Explosion (8 m) – nach jedem Schuss nachladen.' },
+  { name:'Granatwerfer', short:'GL', dmg:0, head:1, rate:0.65, mag:6, reload:3.2, spread:0.01, move:0.03, pellets:1, auto:false, kick:0.06, zoom:55, snd:[420,0.25], price:20000,
+    gl:true, noShell:true, desc:'Verschießt 6 Granaten im Bogen, die beim Aufprall explodieren.' },
+  { name:'Flammenwerfer', short:'FLAM', dmg:2, head:1, rate:0.06, mag:120, reload:3.5, spread:0.09, move:0.02, pellets:3, auto:true, kick:0.002, zoom:62, snd:[180,0.09], price:15000,
+    flame:true, range:10, noShell:true, desc:'Feuerstrahl auf bis zu 10 m – trifft alles im Strahl.' },
+];
+const BASE_WEAPONS = 4;   // 0–3 gibt es für alle, ab 4 kann man kaufen
+
+/* ======================= Coins & Waffenladen (im Browser gespeichert) ======================= */
+const shopState = { coins: 0, bought: [], equip: -1 };
+try {
+  shopState.coins = parseInt(localStorage.getItem('kz_coins')) || 0;
+  shopState.bought = JSON.parse(localStorage.getItem('kz_bought') || '[]');
+  shopState.equip = parseInt(localStorage.getItem('kz_equip'));
+  if (isNaN(shopState.equip)) shopState.equip = -1;
+} catch (e) {}
+function saveShop() {
+  try {
+    localStorage.setItem('kz_coins', shopState.coins);
+    localStorage.setItem('kz_bought', JSON.stringify(shopState.bought));
+    localStorage.setItem('kz_equip', shopState.equip);
+  } catch (e) {}
+}
+const fmt = n => n.toLocaleString('de-DE');
+function updateCoins(bump) {
+  $('coinVal').textContent = fmt(shopState.coins);
+  $('menuCoins').textContent = fmt(shopState.coins);
+  $('shopCoins').textContent = fmt(shopState.coins);
+  if (bump) { const c = $('coinHud'); c.classList.add('bump'); setTimeout(() => c.classList.remove('bump'), 180); }
+}
+function renderShop() {
+  updateCoins();
+  const bar = (label, v) => `<div class="stat"><span>${label}</span><em><i style="width:${Math.round(Math.min(1, v) * 100)}%"></i></em></div>`;
+  let html = '';
+  for (let i = BASE_WEAPONS; i < WEAPONS.length; i++) {
+    const w = WEAPONS[i], owned = shopState.bought.includes(i), eq = shopState.equip === i;
+    let btn;
+    if (!owned) btn = `<button data-buy="${i}" ${shopState.coins < w.price ? 'disabled' : ''}>Kaufen<br><small><span class="coin"></span> ${fmt(w.price)}</small></button>`;
+    else if (eq) btn = `<button class="sec" data-unequip="${i}">✓ Ausgerüstet</button>`;
+    else btn = `<button data-equip="${i}">Ausrüsten</button>`;
+    html += `<div class="shopItem ${eq ? 'eq' : ''}"><div class="info"><div class="nm">${w.name}</div><div class="ds">${w.desc}</div>
+      ${bar('Schaden', (w.rocket ? 150 : w.gl ? 110 : w.dmg * w.pellets) / 60)}${bar('Feuerrate', 0.065 / w.rate)}${bar('Magazin', w.mag / 80)}</div>${btn}</div>`;
+  }
+  $('shopList').innerHTML = html;
+}
+$('shopList').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || b.disabled) return;
+  if (b.dataset.buy) {
+    const i = +b.dataset.buy, w = WEAPONS[i];
+    if (shopState.coins < w.price || shopState.bought.includes(i)) return;
+    shopState.coins -= w.price; shopState.bought.push(i); shopState.equip = i;
+    initAudio(); sndBeep(660, 0.1, 0.12, 'triangle'); setTimeout(() => sndBeep(990, 0.15, 0.12, 'triangle'), 90);
+  } else if (b.dataset.equip) shopState.equip = +b.dataset.equip;
+  else if (b.dataset.unequip) shopState.equip = -1;
+  saveShop(); renderShop();
+  // Im laufenden Spiel sofort in die Hand geben
+  if (running && me.alive && shopState.equip >= BASE_WEAPONS) {
+    for (let i = BASE_WEAPONS; i < WEAPONS.length; i++) me.owned[i] = false;
+    me.owned[shopState.equip] = true; me.ammo[shopState.equip] = WEAPONS[shopState.equip].mag;
+    me.weapon = -1; switchWeapon(shopState.equip);
+  }
+});
+/* ---------- Gutscheincodes: jeder Code bringt 10.000 Coins (einmal pro Spieler/Browser) ---------- */
+// Gespeichert sind nur Prüfsummen der Codes, nicht die Codes selbst
+const VOUCHERS = ['13eztdq6ah2', '1q13z5uf9om', '15tg7vmhet3', '23pn0adb93r', 'lwfi8lkml1', '272xe40gt3v', '43q6ecl3l5', '1lffgy0oz80', 'moic0g8o3f', '17k6yhivqa9'];
+const VOUCHER_COINS = 10000;
+function codeHash(str, seed = 51) {
+  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0; i < str.length; i++) { const ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+function redeemVoucher() {
+  const msg = $('voucherMsg');
+  let code = $('voucherIn').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length === 10) code = code.slice(0, 2) + '-' + code.slice(2, 6) + '-' + code.slice(6);   // Bindestriche ergänzen
+  const h = codeHash(code);
+  let used = [];
+  try { used = JSON.parse(localStorage.getItem('kz_vouchers') || '[]'); } catch (e) {}
+  msg.className = 'err';
+  if (!code) { msg.textContent = 'Bitte einen Code eingeben.'; return; }
+  if (!VOUCHERS.includes(h)) { msg.textContent = '❌ Dieser Code ist ungültig.'; sndBeep(220, 0.15, 0.1, 'square'); return; }
+  if (used.includes(h)) { msg.textContent = '⚠️ Diesen Code hast du schon eingelöst.'; return; }
+  used.push(h);
+  try { localStorage.setItem('kz_vouchers', JSON.stringify(used)); } catch (e) {}
+  shopState.coins += VOUCHER_COINS; saveShop(); renderShop(); updateCoins(true);
+  msg.className = 'ok'; msg.textContent = `✅ Eingelöst! +${fmt(VOUCHER_COINS)} Coins`;
+  $('voucherIn').value = '';
+  initAudio(); sndBeep(660, 0.1, 0.12, 'triangle'); setTimeout(() => sndBeep(990, 0.12, 0.12, 'triangle'), 90); setTimeout(() => sndBeep(1320, 0.18, 0.12, 'triangle'), 180);
+}
+$('voucherBtn').onclick = redeemVoucher;
+$('voucherIn').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') redeemVoucher(); });
+$('voucherIn').addEventListener('keyup', e => e.stopPropagation());
+let shopAtStore = false;   // im Waffenladen auf der Karte: zusätzlich Munition und Granaten
+const openShop = (store) => {
+  shopAtStore = store === true; $('shopStore').classList.toggle('hidden', !shopAtStore);
+  renderShop(); $('voucherMsg').textContent = ''; $('shop').classList.remove('hidden');
+};
+$('btnShop1').onclick = () => openShop(); $('btnShop2').onclick = () => openShop();
+$('shopClose').onclick = () => { $('shop').classList.add('hidden'); if (shopAtStore && running && !TOUCH) lockPointer(); shopAtStore = false; };
+const storeBuy = (cost, fn, msg) => {
+  if (shopState.coins < cost) { sndBeep(220, 0.15, 0.1, 'square'); return; }
+  shopState.coins -= cost; saveShop(); fn(); updateCoins(true); renderShop(); showMsg(msg);
+  initAudio(); sndBeep(660, 0.1, 0.12, 'triangle');
+};
+$('buyAmmo').onclick = () => storeBuy(100, () => { me.ammo = WEAPONS.map(w => w.mag); me.reloading = 0; }, '📦 Munition aufgefüllt');
+$('buyNades').onclick = () => storeBuy(150, () => { me.nades = MAX_NADES; }, '💣 Granaten aufgefüllt');
+updateCoins();
+
+/* ======================= Einstellungen ======================= */
+let sens = 1;
+try { sens = parseFloat(localStorage.getItem('kz_sens')) || 1; $('nameIn').value = localStorage.getItem('kz_name') || ''; } catch (e) {}
+$('sensIn').value = sens; $('sensVal').textContent = sens.toFixed(2);
+$('sensIn').oninput = e => { sens = parseFloat(e.target.value); $('sensVal').textContent = sens.toFixed(2); try { localStorage.setItem('kz_sens', sens); } catch (e) {} };
+function codeFromHash() { if (location.hash.length > 1) $('codeIn').value = location.hash.slice(1).toUpperCase().slice(0, 5); }
+codeFromHash(); addEventListener('hashchange', codeFromHash);
+// Sichtfeld + Lautstärke
+(function () {
+  let fov = 75, vol = 0.8;
+  try { fov = parseFloat(localStorage.getItem('kz_fov')) || 75; const v = parseFloat(localStorage.getItem('kz_vol')); if (!isNaN(v)) vol = v; } catch (e) {}
+  $('fovIn').value = fov; $('fovVal').textContent = fov;
+  $('volIn').value = vol; $('volVal').textContent = Math.round(vol * 100) + ' %';
+  $('fovIn').oninput = e => { const v = +e.target.value; $('fovVal').textContent = v; fovBase = v; try { localStorage.setItem('kz_fov', v); } catch (e) {} };
+  $('volIn').oninput = e => { const v = +e.target.value; $('volVal').textContent = Math.round(v * 100) + ' %'; setVolume(v); try { localStorage.setItem('kz_vol', v); } catch (e) {} };
+})();
+
+/* ======================= Sound (mit Richtung: links/rechts, nah/fern) ======================= */
+let actx = null, noiseBuf = null, master = null, volume = 0.8;
+try { const v = parseFloat(localStorage.getItem('kz_vol')); if (!isNaN(v)) volume = v; } catch (e) {}
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    noiseBuf = actx.createBuffer(1, actx.sampleRate * 2, actx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    master = actx.createGain(); master.gain.value = volume;
+    const comp = actx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
+    master.connect(comp); comp.connect(actx.destination);
+    // Hall der Umgebung (Hauswände, Boden, Weite): für Schüsse – nah wenig, fern viel
+    try {
+      revIn = actx.createGain(); const conv = actx.createConvolver(); conv.buffer = makeIR(actx.sampleRate);
+      const revOut = actx.createGain(); revOut.gain.value = 0.7; revIn.connect(conv); conv.connect(revOut); revOut.connect(master);
+    } catch (e) { revIn = null; }
+    setTimeout(genShotBuffers, 30);   // Schussklänge im Hintergrund vorberechnen
+  } catch (e) { actx = null; }
+}
+/* ---------- Realistische Schüsse: pro Waffe vorberechnete Klänge (3 Varianten) ----------
+   Bestandteile: Mündungsknall (Rauschen, dessen Höhen schnell verschwinden), Anfangsknacken, tiefer „Wumms“,
+   Klacken der Mechanik (Verschluss/Schlitten), Metall-Nachklang (Revolver), Fauchen (Rakete), Knistern (Flammen).
+   Dazu: Hall der Umgebung, ferne Schüsse dumpfer und mit Schall-Verzögerung (343 m/s). */
+let revIn = null;
+const SHOT_SND = [
+  /* 0 Sturmgewehr   */ { lvl: 1.5, len: .45, blast: 1, bd: .045, c1: 9000, c0: 500, cd: .03, crack: .9, body: .55, bf0: 180, bf1: 70, bb: .06, drive: 2.6, mech: [[.04, 3200, .22], [.075, 2400, .16]] },
+  /* 1 Pumpgun       */ { lvl: 1.7, len: .7, blast: 1.2, bd: .08, c1: 6000, c0: 300, cd: .06, crack: .7, body: .9, bf0: 120, bf1: 45, bb: .12, drive: 3.2 },
+  /* 2 Scharfschütze */ { lvl: 1.8, len: 1.0, blast: 1.3, bd: .09, c1: 8000, c0: 250, cd: .07, crack: 1.1, body: 1, bf0: 110, bf1: 40, bb: .16, drive: 3.5 },
+  /* 3 Pistole       */ { lvl: 1.3, len: .32, blast: .9, bd: .03, c1: 10000, c0: 700, cd: .02, crack: 1, body: .45, bf0: 220, bf1: 90, bb: .045, drive: 2.4, mech: [[.025, 3800, .25], [.05, 2900, .14]] },
+  /* 4 MP mit Schalldämpfer */ { lvl: .75, len: .2, blast: .25, bd: .02, c1: 2500, c0: 300, cd: .02, crack: .05, body: .5, bf0: 260, bf1: 120, bb: .03, drive: 1.5, mech: [[.012, 3500, .35], [.035, 2600, .3]] },
+  /* 5 Revolver      */ { lvl: 1.7, len: .55, blast: 1.15, bd: .06, c1: 8000, c0: 450, cd: .04, crack: 1.1, body: .7, bf0: 150, bf1: 60, bb: .08, drive: 3, ring: [1900, .12, .09] },
+  /* 6 Kampfgewehr   */ { lvl: 1.6, len: .6, blast: 1.15, bd: .06, c1: 8500, c0: 400, cd: .045, crack: 1, body: .75, bf0: 140, bf1: 55, bb: .09, drive: 3, mech: [[.05, 2800, .2]] },
+  /* 7 MG            */ { lvl: 1.5, len: .45, blast: 1.05, bd: .05, c1: 8000, c0: 420, cd: .04, crack: .9, body: .7, bf0: 150, bf1: 60, bb: .07, drive: 2.8, mech: [[.035, 2600, .2], [.06, 4200, .12]] },
+  /* 8 Doppelflinte  */ { lvl: 1.8, len: .8, blast: 1.3, bd: .09, c1: 5500, c0: 280, cd: .07, crack: .8, body: 1, bf0: 110, bf1: 40, bb: .14, drive: 3.4 },
+  /* 9 Minigun       */ { lvl: 1.2, len: .14, blast: .8, bd: .02, c1: 9000, c0: 600, cd: .015, crack: .6, body: .4, bf0: 200, bf1: 90, bb: .025, drive: 2.2 },
+  /* 10 Raketenwerfer */ { lvl: 1.6, len: 1.4, blast: .8, bd: .25, c1: 3000, c0: 200, cd: .3, crack: .3, body: 1, bf0: 90, bf1: 35, bb: .2, drive: 2.5, whoosh: .9 },
+  /* 11 Granatwerfer */ { lvl: 1.1, len: .4, blast: .35, bd: .03, c1: 1800, c0: 250, cd: .03, crack: .1, body: 1, bf0: 220, bf1: 70, bb: .05, drive: 2, mech: [[.02, 1500, .2]] },
+  /* 12 Flammenwerfer */ { lvl: .55, len: .3, blast: .5, bd: .18, c1: 1200, c0: 400, cd: .2, crack: 0, body: .1, bf0: 80, bf1: 60, bb: .1, drive: 1.3, atk: .04, crackle: .3 },
+];
+const SHOT_BUF = [];   // fertige Klänge je Waffe
+function synthShot(P, sr, seed) {
+  const n = Math.ceil(P.len * sr), out = new Float32Array(n);
+  let s = (seed >>> 0) || 1; const r1 = () => ((s = (s * 16807) % 2147483647) / 2147483647) * 2 - 1;
+  let l1 = 0, l2 = 0, ph = 0, prev = 0, w1 = 0, w2 = 0, cr = 0;
+  const atk = P.atk || 0.0008, TAU = 6.2832, dt = 1 / sr;
+  // Abklingen schrittweise (Multiplikation statt Math.exp je Abtastwert → schnell)
+  const kC = Math.exp(-dt / P.cd), kB = Math.exp(-dt / P.bd), kF = Math.exp(-dt / 0.035), kBB = Math.exp(-dt / P.bb), kR = P.ring ? Math.exp(-dt / P.ring[2]) : 0, kW = Math.exp(-dt / 0.35), kWE = Math.exp(-dt / 0.45);
+  let eC = 1, eB = 1, eF = 1, eBB = 1, eR = 1, eW = 1, eWE = 1;
+  const lpA = fc => { const q = TAU * fc * dt; return q / (1 + q); };   // Tiefpass-Faktor (Näherung)
+  for (let i = 0; i < n; i++) {
+    const t = i * dt, nz = r1();
+    // Mündungsknall: Rauschen, dessen Filter sich schnell schließt (hell → dumpf)
+    const a = lpA(P.c0 + P.c1 * eC); eC *= kC;
+    l1 += a * (nz - l1); l2 += a * (l1 - l2);
+    let env = 1; if (t < atk) env = t / atk; else { env = eB; eB *= kB; }
+    let x = l2 * env * P.blast * 2.2;
+    // Anfangsknacken (hohe Frequenzen, die ersten 3 ms)
+    if (P.crack && t < 0.003) x += (nz - prev) * (1 - t / 0.003) * P.crack * 0.8;
+    prev = nz;
+    // Wumms: tiefer Ton, der schnell nach unten rutscht
+    if (P.body) { const fb = P.bf1 + (P.bf0 - P.bf1) * eF; eF *= kF; ph += TAU * fb * dt; x += Math.sin(ph) * eBB * P.body * (t < 0.002 ? t / 0.002 : 1); eBB *= kBB; }
+    if (P.ring) { x += Math.sin(TAU * P.ring[0] * t) * eR * P.ring[1]; eR *= kR; }   // Metall klingt nach
+    if (P.mech) for (const [tm, f, am] of P.mech) if (t >= tm && t < tm + 0.03) { const u = t - tm; x += (Math.sin(TAU * f * u) * 0.7 + nz * 0.5) * Math.exp(-u / 0.0035) * am; }   // Verschluss klackt
+    if (P.whoosh) {   // Rakete faucht davon
+      const aw = lpA(300 + 1700 * eW); eW *= kW; w1 += aw * (nz - w1); w2 += aw * (w1 - w2);
+      let ew = 1; if (t < 0.05) ew = t / 0.05; else { ew = eWE; eWE *= kWE; }
+      x += (w1 - w2) * P.whoosh * ew * 3;
+    }
+    if (P.crackle && r1() > 0.992) cr = P.crackle;   // Flammen knistern
+    if (cr > 0.001) { x += nz * cr; cr *= 0.93; }
+    out[i] = Math.tanh(x * P.drive);
+  }
+  let pk = 0; for (let i = 0; i < n; i++) pk = Math.max(pk, Math.abs(out[i]));
+  const k = pk > 0 ? 0.95 / pk : 1, fo = Math.floor(sr * 0.01);
+  for (let i = 0; i < n; i++) out[i] *= k * (i > n - fo ? (n - i) / fo : 1);
+  return out;
+}
+const SHOT_PEND = [];
+function genShotBuffers() {
+  if (!actx) return;
+  const w = SHOT_BUF.length; if (w >= SHOT_SND.length) return;
+  const sr = actx.sampleRate, v = SHOT_PEND.length;
+  const d = synthShot(SHOT_SND[w], sr, 1234 + w * 97 + v * 7919), b = actx.createBuffer(1, d.length, sr); b.getChannelData(0).set(d); SHOT_PEND.push(b);
+  if (SHOT_PEND.length === 3) SHOT_BUF.push(SHOT_PEND.splice(0));   // Waffe fertig (3 Varianten)
+  if (window.requestIdleCallback) requestIdleCallback(genShotBuffers, { timeout: 400 }); else setTimeout(genShotBuffers, 25);   // ein Klang pro Schritt, in Ruhepausen → kein Ruckeln
+}
+// Hall-Antwort: dichter Nachhall (wird dunkler) + einzelne frühe Echos von Wänden
+function makeIR(sr) {
+  const L = Math.floor(sr * 2.2), b = actx.createBuffer(2, L, sr);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = b.getChannelData(ch); let lp = 0;
+    for (let i = 0; i < L; i++) {
+      const t = i / sr, a = 1 - Math.exp(-6.2832 * (5000 * Math.exp(-t / 0.45) + 300) / sr);
+      lp += a * ((Math.random() * 2 - 1) - lp);
+      d[i] = lp * Math.exp(-t * 2.6) * (t < 0.015 ? t / 0.015 : 1) * 0.5;
+    }
+    for (let k = 0; k < 9; k++) {
+      const ti = Math.floor(sr * (0.025 + Math.random() * 0.25)), amp = (0.45 - k * 0.035) * (Math.random() < 0.5 ? -1 : 1);
+      for (let j = 0; j < 60 && ti + j < L; j++) d[ti + j] += amp * Math.exp(-j / 10) * (Math.random() * 2 - 1);
+    }
+  }
+  return b;
+}
+function setVolume(v) { volume = v; if (master) master.gain.value = v; }
+// Position → Lautstärke (Entfernung) und Stereo-Richtung (relativ zur Blickrichtung)
+function spatialOut(pos, maxD = 80) {
+  if (!pos || typeof me === 'undefined') return { node: master, g: 1, d: 0 };
+  const dx = pos.x - camera.position.x, dy = pos.y - camera.position.y, dz = pos.z - camera.position.z;
+  const d = Math.hypot(dx, dy, dz);
+  const g = Math.pow(Math.max(0, 1 - d / maxD), 1.4);
+  let node = master;
+  if (actx.createStereoPanner && d > 0.5) {
+    const rx = Math.cos(me.yaw), rz = -Math.sin(me.yaw);
+    const p = actx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, (dx * rx + dz * rz) / d)) * 0.85;
+    p.connect(master); node = p;
+  }
+  return { node, g, d };
+}
+function noiseSrc() { const s = actx.createBufferSource(); s.buffer = noiseBuf; return s; }
+function sndShot(w, vol = 0.5, pos) {
+  if (!actx) return;
+  const set = SHOT_BUF[w], P = SHOT_SND[w];
+  if (!set || !P) return sndShotOld(w, vol, pos);   // Klänge noch nicht fertig berechnet
+  const o = spatialOut(pos, 180); if (o.g <= 0.005) return;
+  const d = o.d || 0, far = Math.min(1, d / 110);
+  const t = actx.currentTime + Math.min(0.45, d / 343);   // Schall braucht Zeit (fern = später)
+  const src = actx.createBufferSource(); src.buffer = set[Math.floor(Math.random() * set.length)]; src.playbackRate.value = 0.96 + Math.random() * 0.08;
+  let node = src;
+  if (far > 0.04) { const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 900 + 15000 * Math.pow(1 - far, 2.2); src.connect(f); node = f; }   // fern = dumpf
+  const g = actx.createGain(); g.gain.value = vol * o.g * P.lvl * (0.92 + Math.random() * 0.16);
+  node.connect(g); g.connect(o.node);
+  if (revIn) { const sg = actx.createGain(); sg.gain.value = vol * Math.max(o.g, 0.04) * P.lvl * (0.2 + far * 0.6); node.connect(sg); sg.connect(revIn); }
+  src.start(t);
+}
+/* ---------- Umgebungsgeräusche: Wind in Böen (höher oben lauter), Vögel auf dem Land, Stadtrauschen in der Stadt ---------- */
+const AMB = { on: false, bird: 3 };
+function ambientTick(dt) {
+  if (!actx || !master || typeof me === 'undefined') return;
+  if (!AMB.on) {
+    const loop = (type, f, q) => { const s = noiseSrc(); s.loop = true; const fl = actx.createBiquadFilter(); fl.type = type; fl.frequency.value = f; if (q) fl.Q.value = q; const g = actx.createGain(); g.gain.value = 0; s.connect(fl); fl.connect(g); g.connect(master); s.start(); return { g, fl }; };
+    const w = loop('bandpass', 380, 0.6), c = loop('lowpass', 160);
+    Object.assign(AMB, { on: true, wg: w.g, wf: w.fl, cg: c.g });
+  }
+  const t = actx.currentTime, x = me.pos.x, z = me.pos.z, play = typeof running !== 'undefined' && running;
+  const inCity = MAP_ID !== 'welt' || (x > 28 && x < 292 && z > -292 && z < -28) || (x > 348 && x < 482 && Math.abs(z) < 345);
+  const gust = 0.5 + 0.5 * Math.sin(t * 0.37) * Math.sin(t * 0.13 + 1), high = Math.min(1, Math.max(0, me.pos.y) / 80);
+  AMB.wg.gain.setTargetAtTime(play ? 0.012 + 0.016 * gust + 0.03 * high : 0, t, 0.6);
+  AMB.wf.frequency.setTargetAtTime(280 + 260 * gust + 300 * high, t, 0.6);
+  AMB.cg.gain.setTargetAtTime(play && inCity ? 0.045 : 0, t, 1.2);
+  AMB.bird -= dt;
+  if (AMB.bird <= 0) { AMB.bird = 2.5 + Math.random() * 6; if (play && !inCity && me.pos.y < 25) birdChirp(); }
+}
+function birdChirp() {
+  const n = 2 + Math.floor(Math.random() * 4), f0 = 2200 + Math.random() * 1800, t0 = actx.currentTime;
+  let out = master; if (actx.createStereoPanner) { out = actx.createStereoPanner(); out.pan.value = Math.random() * 1.6 - 0.8; out.connect(master); }
+  for (let k = 0; k < n; k++) {
+    const t = t0 + k * 0.11 + Math.random() * 0.03, o = actx.createOscillator(), g = actx.createGain(); o.type = 'sine';
+    o.frequency.setValueAtTime(f0 * (1 + Math.random() * 0.15), t); o.frequency.exponentialRampToValueAtTime(f0 * (1.3 + Math.random() * 0.4), t + 0.06);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.011, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+    o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.1);
+  }
+}
+// alter, einfacher Schussklang (nur bis die neuen Klänge berechnet sind)
+function sndShotOld(w, vol = 0.5, pos) {
+  if (!actx) return;
+  const o = spatialOut(pos, 120); if (o.g <= 0.01) return;
+  const [freq, len] = WEAPONS[w] ? WEAPONS[w].snd : [1400, 0.09], t = actx.currentTime, v = vol * o.g;
+  const far = Math.min(1, o.d / 60);   // ferne Schüsse klingen dumpfer
+  const src = noiseSrc(), f = actx.createBiquadFilter(); f.type = 'lowpass';
+  f.frequency.setValueAtTime(freq * 3.5 * (1 - far * 0.7), t); f.frequency.exponentialRampToValueAtTime(freq * 0.35, t + len);
+  const g = actx.createGain(); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + len * 1.2);
+  src.connect(f); f.connect(g); g.connect(o.node); src.start(t, Math.random() * 0.5); src.stop(t + len * 1.3);
+  const osc = actx.createOscillator(); osc.type = 'sine';
+  osc.frequency.setValueAtTime(150, t); osc.frequency.exponentialRampToValueAtTime(40, t + 0.12);
+  const g2 = actx.createGain(); g2.gain.setValueAtTime(v * 0.9 * (1 - far * 0.5), t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+  osc.connect(g2); g2.connect(o.node); osc.start(t); osc.stop(t + 0.16);
+  const tail = noiseSrc(), f3 = actx.createBiquadFilter(); f3.type = 'bandpass'; f3.frequency.value = 420; f3.Q.value = 0.6;
+  const g3 = actx.createGain(); g3.gain.setValueAtTime(0.0001, t); g3.gain.linearRampToValueAtTime(v * 0.2, t + 0.04); g3.gain.exponentialRampToValueAtTime(0.001, t + 0.6 + far * 0.6);
+  tail.connect(f3); f3.connect(g3); g3.connect(o.node); tail.start(t, Math.random() * 0.4); tail.stop(t + 1.3);
+}
+function sndStep(vol, pos) {
+  if (!actx || vol < 0.005) return;
+  const o = spatialOut(pos, 30), v = vol * (pos ? 1 : 1);
+  const t = actx.currentTime, src = noiseSrc();
+  const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 260 + Math.random() * 120;
+  const g = actx.createGain(); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+  src.connect(f); f.connect(g); g.connect(o.node); src.start(t, Math.random() * 1.5); src.stop(t + 0.1);
+}
+function sndBeep(freq, len, vol = 0.15, type = 'square') {
+  if (!actx) return;
+  const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + len);
+  o.connect(g); g.connect(master); o.start(t); o.stop(t + len);
+}
+// Metallisches Klicken (Nachladen, Waffe wechseln, Durchladen)
+function sndClick(vol = 0.08, pitch = 1) {
+  if (!actx) return;
+  const t = actx.currentTime, src = noiseSrc(), f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 2600 * pitch; f.Q.value = 3;
+  const g = actx.createGain(); g.gain.setValueAtTime(vol * 2.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+  src.connect(f); f.connect(g); g.connect(master); src.start(t, Math.random()); src.stop(t + 0.06);
+}
+function sndSwish(vol = 1) {
+  if (!actx) return;
+  const t = actx.currentTime, src = noiseSrc(), f = actx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.5;
+  f.frequency.setValueAtTime(600, t); f.frequency.exponentialRampToValueAtTime(3000, t + 0.15);
+  const g = actx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.18 * vol, t + 0.06); g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+  src.connect(f); f.connect(g); g.connect(master); src.start(t, Math.random()); src.stop(t + 0.22);
+}
+function sndThud(vol = 1) {
+  if (!actx) return;
+  const t = actx.currentTime, osc = actx.createOscillator(); osc.frequency.setValueAtTime(120, t); osc.frequency.exponentialRampToValueAtTime(50, t + 0.1);
+  const g = actx.createGain(); g.gain.setValueAtTime(0.3 * vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+  osc.connect(g); g.connect(master); osc.start(t); osc.stop(t + 0.13);
+}
+function sndSlide() {
+  if (!actx) return;
+  const t = actx.currentTime, src = noiseSrc(), f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 900;
+  const g = actx.createGain(); g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+  src.connect(f); f.connect(g); g.connect(master); src.start(t, Math.random()); src.stop(t + 0.75);
+}
+function sndHit(head) {
+  if (!actx) return;
+  sndBeep(head ? 1700 : 1100, 0.05, 0.1, 'triangle');
+  if (head) setTimeout(() => sndBeep(2400, 0.12, 0.06, 'sine'), 30);
+}
+function sndBoom(pos) {
+  if (!actx) return;
+  const o = spatialOut(pos, 160), t = actx.currentTime, v = 0.9 * Math.max(0.15, o.g);
+  const src = noiseSrc(), f = actx.createBiquadFilter(); f.type = 'lowpass';
+  f.frequency.setValueAtTime(1800, t); f.frequency.exponentialRampToValueAtTime(90, t + 1.2);
+  const g = actx.createGain(); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 1.6);
+  src.connect(f); f.connect(g); g.connect(o.node); src.start(t); src.stop(t + 1.7);
+  const osc = actx.createOscillator(); osc.frequency.setValueAtTime(90, t); osc.frequency.exponentialRampToValueAtTime(25, t + 0.6);
+  const g2 = actx.createGain(); g2.gain.setValueAtTime(v, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+  osc.connect(g2); g2.connect(o.node); osc.start(t); osc.stop(t + 0.72);
+}
+
+/* ======================= Three.js Szene ======================= */
+// Farben werden wie in Bildprogrammen (sRGB) angegeben und intern linear berechnet
+(function () {
+  const sh = THREE.Color.prototype.setHex, ss = THREE.Color.prototype.setStyle;
+  THREE.Color.prototype.setHex = function (h) { sh.call(this, h); return this.convertSRGBToLinear(); };
+  THREE.Color.prototype.setStyle = function (s) { ss.call(this, s); return this.convertSRGBToLinear(); };
+})();
+THREE.Cache.enabled = true;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+document.body.prepend(renderer.domElement);
+const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xb9cde0);
+scene.fog = MAP_ID === 'welt' ? new THREE.Fog(0xb9cde0, 90, 300) : new THREE.Fog(0xb9cde0, 110, 480);
+const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 900);
+camera.rotation.order = 'YXZ';
+scene.add(camera);
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+
+/* ---------- Ladeanzeige ---------- */
+const loadMgr = new THREE.LoadingManager();
+loadMgr.onProgress = (url, n, total) => { const el = $('loadInfo'); if (el) el.textContent = `Grafik wird geladen … ${Math.round(n / total * 100)} %`; };
+loadMgr.onLoad = () => { const el = $('loadInfo'); if (el) el.textContent = 'Grafik geladen ✓'; };
+
+/* ---------- Licht ---------- */
+const SUN_DIR = new THREE.Vector3(0.45, 0.7, 0.55).normalize();
+const hemi = new THREE.HemisphereLight(0xd6e6ff, 0x5a5040, 0.35);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff1dc, 2.6);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.03;
+Object.assign(sun.shadow.camera, { left: -42, right: 42, top: 42, bottom: -42, near: 1, far: 240 });
+scene.add(sun); scene.add(sun.target);
+// Schattenbereich wandert mit dem Spieler mit (auf 4 m gerastert, damit Schatten nicht flimmern)
+const sunCenter = new THREE.Vector3();
+function placeSun() { sun.target.position.copy(sunCenter); sun.position.copy(sunCenter).addScaledVector(SUN_DIR, 110); }
+function followSun(x, z) {   // true = Schattenbereich ist gewandert
+  const sx = Math.round(x / 4) * 4, sz = Math.round(z / 4) * 4;
+  if (sx === sunCenter.x && sz === sunCenter.z) return false;
+  sunCenter.set(sx, 0, sz); placeSun(); return true;
+}
+placeSun();
+
+/* ---------- Ersatzhimmel (bis das Foto geladen ist) ---------- */
+const skyTop = new THREE.Color(0x3a78c8).convertLinearToSRGB(), skyHor = new THREE.Color(0xc4d6e6).convertLinearToSRGB();
+const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(600, 32, 16), new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false,
+  uniforms: { top: { value: skyTop }, horizon: { value: skyHor } },
+  vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: 'uniform vec3 top; uniform vec3 horizon; varying vec3 vDir; void main(){ float h = clamp(normalize(vDir).y, 0.0, 1.0); gl_FragColor = vec4(mix(horizon, top, pow(h, 0.55)), 1.0); }'
+}));
+skyMesh.renderOrder = -10;
+scene.add(skyMesh);
+
+/* ---------- Foto-Himmel (HDRI): Hintergrund, Umgebungslicht, Reflexionen, Sonnenstand ---------- */
+const pmrem = new THREE.PMREMGenerator(renderer);
+function halfToFloat(h) {
+  const s = (h & 0x8000) >> 15, e = (h & 0x7C00) >> 10, f = h & 0x03FF;
+  if (e === 0) return (s ? -1 : 1) * Math.pow(2, -14) * (f / 1024);
+  if (e === 0x1F) return f ? NaN : (s ? -1 : 1) * Infinity;
+  return (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + f / 1024);
+}
+function analyzeSky(tex) {
+  try {
+    const { data, width: w, height: h } = tex.image;
+    const ch = data.length / (w * h);
+    const px = (r, c) => { const i = (r * w + c) * ch; return [halfToFloat(data[i]), halfToFloat(data[i + 1]), halfToFloat(data[i + 2])]; };
+    // Hellster Punkt in der oberen Hälfte = Sonne
+    let best = -1, br = 0, bc = 0;
+    for (let r = 0; r < h / 2; r += 2) for (let c = 0; c < w; c += 2) {
+      const p = px(r, c), l = p[0] * 0.2126 + p[1] * 0.7152 + p[2] * 0.0722;
+      if (l > best) { best = l; br = r; bc = c; }
+    }
+    const el = (0.5 - (br + 0.5) / h) * Math.PI, az = ((bc + 0.5) / w - 0.5) * Math.PI * 2;
+    const dir = new THREE.Vector3(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el)).normalize();
+    if (dir.y > 0.15) { SUN_DIR.copy(dir); placeSun(); }
+    // Horizontfarbe für den Dunst
+    let acc = [0, 0, 0], n = 0;
+    const row = Math.floor(h * 0.47);
+    for (let c = 0; c < w; c += 4) { const p = px(row, c); acc[0] += p[0]; acc[1] += p[1]; acc[2] += p[2]; n++; }
+    const aces = x => Math.min(1, (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14));
+    const toS = x => x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055;
+    const f = acc.map(v => toS(aces(v / n * 0.6)));
+    scene.fog.color.setRGB(f[0], f[1], f[2]);
+  } catch (e) { /* Standardwerte behalten */ }
+}
+new THREE.RGBELoader(loadMgr).setDataType(THREE.HalfFloatType).load('textures/sky.hdr', tex => {
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  analyzeSky(tex);
+  scene.environment = pmrem.fromEquirectangular(tex).texture;
+  scene.background = tex;
+  skyMesh.visible = false;
+});
+
+/* ---------- Hilfsfunktionen für Texturen ---------- */
+function canvasTex(draw, size = 256, repeat = true) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const g = c.getContext('2d'); draw(g, size);
+  const t = new THREE.CanvasTexture(c);
+  if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = MAX_ANISO;
+  t.encoding = THREE.sRGBEncoding;
+  return t;
+}
+const rnd = (a, b) => a + Math.random() * (b - a);
+function speckle(g, s, n, rgb, aMax, size = 2) {
+  for (let i = 0; i < n; i++) {
+    g.fillStyle = `rgba(${rgb},${Math.random() * aMax})`;
+    const r = Math.random() * size + 0.5;
+    g.fillRect(Math.random() * s, Math.random() * s, r, r);
+  }
+}
+const texLoader = new THREE.TextureLoader(loadMgr);
+// Gleiches Foto mit gleicher Kachelung nur EINMAL laden/hochladen (sonst landet z. B. Asphalt 7× im Grafikspeicher → Handys stürzen ab)
+const PTEX_CACHE = new Map();
+function ptex(file, srgb, rx = 1, ry = rx) {
+  const key = file + '|' + !!srgb + '|' + rx + '|' + ry;
+  if (PTEX_CACHE.has(key)) return PTEX_CACHE.get(key);
+  const t = texLoader.load('textures/' + file); PTEX_CACHE.set(key, t);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = MAX_ANISO;
+  if (srgb) t.encoding = THREE.sRGBEncoding;
+  return t;
+}
+// Foto-Material: Farbe + Relief (Normal Map) + Rauheit/Metall/Schatten (ARM)
+function pbr(name, tile, opts = {}, rx = 1, ry = rx) {
+  // Handy: nur das Farbfoto (ohne Relief- und Rauheitskarte) – spart 2/3 des Grafikspeichers
+  const arm = TOUCH ? null : ptex(name + '_arm.jpg', false, rx, ry);
+  const m = new THREE.MeshStandardMaterial(Object.assign({
+    map: opts.map || ptex(name + '_diff.jpg', true, rx, ry),
+    normalMap: TOUCH ? null : ptex(name + '_nor.jpg', false, rx, ry),
+    roughnessMap: arm, metalnessMap: arm, aoMap: arm,
+    roughness: TOUCH ? 0.85 : 1, metalness: TOUCH ? 0 : 1, aoMapIntensity: 1,
+  }, opts.mat || {}));
+  if (opts.normalScale) m.normalScale.set(opts.normalScale, opts.normalScale);
+  m.userData.tile = tile;
+  return m;
+}
+// Container-Foto in andere Farbe umfärben (Details bleiben erhalten)
+const TINT_CACHE = new Map();
+function tintedTex(name, hex) {
+  const ck = name + hex; if (TINT_CACHE.has(ck)) return TINT_CACHE.get(ck);
+  const c = document.createElement('canvas'); c.width = c.height = 4;
+  const t = new THREE.CanvasTexture(c); TINT_CACHE.set(ck, t);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = MAX_ANISO; t.encoding = THREE.sRGBEncoding;
+  loadMgr.itemStart('tint-' + hex);
+  const img = new Image();
+  img.onload = () => {
+    const sc = TOUCH ? 0.5 : 1; c.width = img.width * sc; c.height = img.height * sc;   // Handy: halbe Auflösung
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0, c.width, c.height);
+    const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+    let sum = 0; for (let i = 0; i < p.length; i += 4) sum += p[i] * 0.3 + p[i + 1] * 0.59 + p[i + 2] * 0.11;
+    const avg = sum / (p.length / 4);
+    const tr = (hex >> 16) & 255, tg = (hex >> 8) & 255, tb = hex & 255;
+    for (let i = 0; i < p.length; i += 4) {
+      const l = (p[i] * 0.3 + p[i + 1] * 0.59 + p[i + 2] * 0.11) / avg;
+      p[i] = Math.min(255, tr * l); p[i + 1] = Math.min(255, tg * l); p[i + 2] = Math.min(255, tb * l);
+    }
+    g.putImageData(d, 0, 0); t.needsUpdate = true;
+    loadMgr.itemEnd('tint-' + hex);
+  };
+  img.onerror = () => loadMgr.itemEnd('tint-' + hex);
+  img.src = 'textures/' + name + '_diff.jpg';
+  return t;
+}
+
+/* ---------- Selbst erzeugte Texturen (Sandsäcke, Fenster, Türen, Bäume, Gras) ---------- */
+const TEX = {
+  sandbag: canvasTex((g, s) => {
+    g.fillStyle = '#6f6248'; g.fillRect(0, 0, s, s);
+    const rows = 4, w = s / 2, h = s / rows;
+    for (let r = 0; r < rows; r++) for (let c = -1; c < 3; c++) {
+      const x = c * w + (r % 2 ? w / 2 : 0) + 3, y = r * h + 3;
+      const gr = g.createLinearGradient(0, y, 0, y + h); gr.addColorStop(0, '#b8a882'); gr.addColorStop(0.6, '#9c8c66'); gr.addColorStop(1, '#6b5d40');
+      g.fillStyle = gr; g.beginPath(); g.ellipse(x + w / 2 - 3, y + h / 2 - 3, w / 2 - 3, h / 2 - 3, 0, 0, 7); g.fill();
+    }
+    speckle(g, s, 6000, '50,40,25', 0.25, 1.5); speckle(g, s, 2000, '220,210,180', 0.12, 1);
+  }, 256),
+  window: canvasTex((g, s) => {
+    g.fillStyle = '#c9c5bd'; g.fillRect(0, 0, s, s);
+    g.fillStyle = '#1c2630'; g.fillRect(s * 0.08, s * 0.08, s * 0.84, s * 0.84);
+    g.fillStyle = '#c9c5bd'; g.fillRect(s * 0.47, 0, s * 0.06, s); g.fillRect(0, s * 0.47, s, s * 0.06);
+  }, 128, false),
+  door: canvasTex((g, s) => {
+    g.fillStyle = '#3d4a52'; g.fillRect(0, 0, s, s);
+    g.strokeStyle = 'rgba(0,0,0,.4)'; g.lineWidth = 4; g.strokeRect(s * .1, s * .08, s * .8, s * .38); g.strokeRect(s * .1, s * .54, s * .8, s * .38);
+    g.fillStyle = '#b8b8b0'; g.fillRect(s * .78, s * .5, s * .08, s * .04);
+    speckle(g, s, 1500, '0,0,0', 0.3, 2);
+  }, 128, false),
+  needles: canvasTex((g, s) => {
+    g.clearRect(0, 0, s, s);
+    for (let i = 0; i < 2600; i++) {
+      const x = Math.random() * s, y = Math.random() * s * 0.92;
+      const len = rnd(6, 16), a = Math.PI / 2 + rnd(-0.6, 0.6);
+      const v = rnd(0.6, 1.1);
+      g.strokeStyle = `rgba(${32 * v | 0},${58 * v | 0},${28 * v | 0},0.95)`; g.lineWidth = rnd(1, 2.2);
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len); g.stroke();
+    }
+    g.globalCompositeOperation = 'destination-out';
+    g.beginPath(); g.moveTo(0, s);
+    for (let x = 0; x <= s; x += 8) g.lineTo(x, s - rnd(4, 40));
+    g.lineTo(s, s); g.closePath(); g.fill();
+  }, 256, true),
+  bark: canvasTex((g, s) => {
+    g.fillStyle = '#4a3a2c'; g.fillRect(0, 0, s, s);
+    for (let i = 0; i < 300; i++) { g.strokeStyle = `rgba(${rnd(20, 50) | 0},${rnd(15, 35) | 0},10,.7)`; g.lineWidth = rnd(1, 4); const x = Math.random() * s; g.beginPath(); g.moveTo(x, 0); g.lineTo(x + rnd(-8, 8), s); g.stroke(); }
+    speckle(g, s, 3000, '90,75,60', 0.3, 2);
+  }, 128),
+  blades: canvasTex((g, s) => {
+    g.clearRect(0, 0, s, s);
+    for (let i = 0; i < 70; i++) {
+      const x = rnd(4, s - 4), h = rnd(s * 0.4, s * 0.98), lean = rnd(-14, 14);
+      const v = rnd(0.7, 1.15);
+      g.fillStyle = `rgb(${70 * v | 0},${100 * v | 0},${38 * v | 0})`;
+      g.beginPath(); g.moveTo(x - 2.5, s); g.quadraticCurveTo(x + lean * 0.3, s - h * 0.6, x + lean, s - h); g.lineTo(x + 2.5, s); g.fill();
+    }
+  }, 128, false),
+  stain: canvasTex((g, s) => {
+    g.clearRect(0, 0, s, s);
+    for (let i = 0; i < 6; i++) {
+      const x = rnd(s * 0.3, s * 0.7), y = rnd(s * 0.3, s * 0.7), r = rnd(s * 0.12, s * 0.3);
+      const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, 'rgba(12,12,10,.55)'); gr.addColorStop(1, 'rgba(12,12,10,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, s, s);
+    }
+  }, 128, false),
+};
+
+/* ---------- Materialien ---------- */
+const MAT = {
+  concrete: pbr('concrete', 2.7),
+  brick: pbr('brick', 2.5),
+  crate: pbr('wood', 0, { mat: { color: new THREE.Color(1.6, 1.45, 1.25) } }),
+  metal: pbr('metal', 1.5),
+  roof: pbr('roof', 2.5),
+  sandbag: new THREE.MeshStandardMaterial({ map: TEX.sandbag, roughness: 1, bumpMap: TEX.sandbag, bumpScale: 0.015 }),
+  grass: pbr('grass', 2),
+  window: new THREE.MeshStandardMaterial({ map: TEX.window, roughness: 0.06, metalness: 0.5, envMapIntensity: 1.4 }),
+  door: new THREE.MeshStandardMaterial({ map: TEX.door, roughness: 0.6, metalness: 0.3 }),
+  dark: new THREE.MeshStandardMaterial({ color: 0x2e3236, roughness: 0.6, metalness: 0.5 }),
+  yellow: new THREE.MeshStandardMaterial({ color: 0xd9b23a, roughness: 0.8 }),
+  ctrGreen: pbr('container', 2.6),
+  ctrRed: pbr('container', 2.6, { map: tintedTex('container', 0x9b3226) }),
+  ctrBlue: pbr('container', 2.6, { map: tintedTex('container', 0x2d5a8a) }),
+  ctrOrange: pbr('container', 2.6, { map: tintedTex('container', 0xc06a22) }),
+};
+
+/* ---------- Boden: Asphalt in der Arena, Hügellandschaft außen ---------- */
+const mapMeshes = [];
+function withUv2(geo) { geo.setAttribute('uv2', geo.attributes.uv); return geo; }
+/* Box mit abgerundeten Kanten und Ecken (r = Radius). Die Rundung bekommt m eigene Segmente,
+   die flachen Flächen bleiben flach. tile = Texturgröße in Metern (0 = Textur passt auf jede Fläche). */
+function roundedBoxGeo(w, h, d, r, m = 2, tile = 0) {
+  r = Math.max(0.0005, Math.min(r, w / 2 - 1e-4, h / 2 - 1e-4, d / 2 - 1e-4));
+  const n = 2 * m + 1, g = new THREE.BoxGeometry(1, 1, 1, n, n, n);
+  const pos = g.attributes.position, nor = g.attributes.normal, uv = g.attributes.uv;
+  const half = [w / 2, h / 2, d / 2], size = [w, h, d];
+  const map = (t, a) => { const i = Math.round((t + 0.5) * n), L = half[a]; return i <= m ? -L + r * (i / m) : L - r * ((n - i) / m); };
+  const p = [0, 0, 0], inner = [0, 0, 0], dv = [0, 0, 0];
+  for (let k = 0; k < pos.count; k++) {
+    p[0] = map(pos.getX(k), 0); p[1] = map(pos.getY(k), 1); p[2] = map(pos.getZ(k), 2);
+    // Fläche dieser Ecke (vor dem Abrunden) → Texturkoordinaten in Weltgröße
+    const nx = Math.abs(nor.getX(k)), ny = Math.abs(nor.getY(k));
+    const fa = nx > 0.5 ? 0 : ny > 0.5 ? 1 : 2;
+    const ua = fa === 0 ? 2 : 0, va = fa === 1 ? 2 : 1;
+    if (tile) uv.setXY(k, (p[ua] + half[ua]) / tile, (p[va] + half[va]) / tile);
+    else uv.setXY(k, (p[ua] + half[ua]) / size[ua], (p[va] + half[va]) / size[va]);
+    // Auf die Rundung projizieren
+    let len = 0;
+    for (let a = 0; a < 3; a++) { inner[a] = Math.max(-half[a] + r, Math.min(half[a] - r, p[a])); dv[a] = p[a] - inner[a]; len += dv[a] * dv[a]; }
+    len = Math.sqrt(len);
+    if (len > 1e-7) {
+      pos.setXYZ(k, inner[0] + dv[0] / len * r, inner[1] + dv[1] / len * r, inner[2] + dv[2] / len * r);
+      nor.setXYZ(k, dv[0] / len, dv[1] / len, dv[2] / len);
+    } else pos.setXYZ(k, p[0], p[1], p[2]);
+  }
+  return withUv2(g);
+}
+(function ground() {
+  // Asphalt über die ganze Spielfläche (Tokio: x/z -101 … 101; Hafenviertel: x -62 … 56, z -62 … 62)
+  const hafen = MAP_ID === 'hafen', welt = MAP_ID === 'welt', FW = hafen ? 118 : welt ? 1440 : 203, FD = hafen ? 124 : welt ? 780 : 203;   // Welt: x -390 … 1050 (Osten: F1-Strecke + Flughafen)
+  // Welt: Wiese als Boden (Straßen kommen als Asphaltstreifen darauf), sonst Asphalt
+  // Welt: saftig grüne Wiese (eingefärbtes Gras-Foto, 5-m-Kacheln)
+  const wiese = welt ? tintedTex('grass', 0x587a34) : null; if (wiese) wiese.repeat.set(FW / 5, FD / 5);
+  const floor = new THREE.Mesh(withUv2(new THREE.PlaneGeometry(FW, FD)), welt ? pbr('grass', 2, { map: wiese }, FW / 5, FD / 5) : pbr('asphalt', 3, {}, FW / 3, FD / 3));
+  floor.rotation.x = -Math.PI / 2; floor.position.x = hafen ? -3 : welt ? 330 : 0; floor.receiveShadow = true;
+  scene.add(floor); mapMeshes.push(floor);
+  // Hügel per Rauschfunktion
+  const hash = (x, z) => { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); };
+  const vnoise = (x, z) => {
+    const xi = Math.floor(x), zi = Math.floor(z), xf = x - xi, zf = z - zi;
+    const u = xf * xf * (3 - 2 * xf), v = zf * zf * (3 - 2 * zf);
+    const a = hash(xi, zi), b = hash(xi + 1, zi), c = hash(xi, zi + 1), d = hash(xi + 1, zi + 1);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  };
+  const fbm = (x, z) => { let s = 0, a = 0.5, f = 1; for (let i = 0; i < 5; i++) { s += vnoise(x * f, z * f) * a; f *= 2; a *= 0.5; } return s; };
+  const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  // Hügel rund um die (quadratische) Karte, im Osten Hafenbecken
+  // Abstand zum Rand: Stadt + Skyline reichen bis ~225 m, erst dahinter beginnen die Hügel
+  const mapEdge = hafen ? (x, z) => Math.max(Math.abs(x + 3), z > 0 ? Math.max(0, z - 70) : -z)
+    : welt ? (x, z) => x <= 0 ? Math.max(-x, Math.abs(z)) - 312   // Osten: durchgehend flach bis x 1040 (Ringstadt, F1-Ring, Flughafen), dann Berge
+      : Math.max(Math.abs(z) - 312, x - 972) : (x, z) => Math.max(Math.abs(x), Math.abs(z)) - 160;
+  window.mapEdge = mapEdge;
+  // Welt: Berge ab ~380 m (begehbar bis 440 m), die Hauptstraßen laufen in Tälern hindurch; ohne feines Rauschen,
+  // damit das sichtbare Gelände und die Kollision (hillH) übereinstimmen
+  const heightAt = (x, z) => {
+    const edge = mapEdge(x, z);
+    let hills = sstep(68, welt ? 140 : 200, edge) * (fbm(x * 0.008 + 3, z * 0.008) * 70 + 4) + (welt ? 0 : sstep(63, 85, edge) * fbm(x * 0.06, z * 0.06) * 2);
+    if (welt) hills *= sstep(8, 30, Math.abs(x)) * sstep(8, 30, Math.abs(z));
+    const sea = welt ? 0 : hafen ? sstep(54, 62, x) : sstep(101, 108, x);
+    return hills * (1 - sea) - 6 * sea - 0.06;
+  };
+  const geo = welt ? new THREE.PlaneGeometry(1660, 1000, 332, 200) : new THREE.PlaneGeometry(1000, 1000, 120, 120); geo.rotateX(-Math.PI / 2); if (welt) geo.translate(330, 0, 0);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) pos.setY(i, heightAt(pos.getX(i), pos.getZ(i)));
+  geo.computeVertexNormals(); withUv2(geo);
+  // Einfacheres Material für die weite Landschaft (schneller)
+  const terrain = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: ptex('grass_diff.jpg', true, 250, 250), color: welt ? new THREE.Color(0.42, 0.68, 0.32) : new THREE.Color(0.62, 0.85, 0.45) }));
+  scene.add(terrain);
+  window.terrainHeight = heightAt;
+})();
+function decal(x, z, w, d, mat, rot = 0, y = 0.012) {
+  const m = new THREE.Mesh(withUv2(new THREE.PlaneGeometry(w, d)), mat);
+  m.rotation.set(-Math.PI / 2, 0, rot); m.position.set(x, y, z); m.receiveShadow = true;
+  scene.add(m); return m;
+}
+
