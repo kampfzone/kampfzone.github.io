@@ -59,7 +59,9 @@
     REC.busy = true;
     let stream = null, mode = 'bild';
     if (camReady()) {   // oben Spiel, unten Lenkrad-Kamera – auf einer Leinwand zusammengesetzt
-      const gc = renderer.domElement, W = 1280, gH = Math.round(W * gc.height / gc.width / 2) * 2, cH = 720;
+      // Höhe des unteren Bereichs = echtes Format der Kamera (Querformat 16:9 → 720 px, Hochkant bis 1280 px) → nie gestaucht
+      const gc = renderer.domElement, W = 1280, gH = Math.round(W * gc.height / gc.width / 2) * 2;
+      const cH = Math.round(Math.min(1280, Math.max(360, W * CAM.video.videoHeight / CAM.video.videoWidth)) / 2) * 2;
       const c = document.createElement('canvas'); c.width = W; c.height = gH + cH;
       REC.comp = { c, g: c.getContext('2d'), W, gH, cH };
       try { stream = canvasStream(c); mode = 'kamera'; } catch (e) { stream = null; REC.comp = null; }
@@ -118,9 +120,10 @@
     const { g, W, gH, cH } = REC.comp, gc = renderer.domElement;
     g.drawImage(gc, 0, 0, W, gH);
     const v = CAM.video;
-    if (camReady()) {
-      const vw = v.videoWidth, vh = v.videoHeight, sc = Math.max(W / vw, cH / vh), sw = W / sc, sh = cH / sc;
-      g.drawImage(v, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, gH, W, cH);
+    if (camReady()) {   // ganzes Kamerabild im echten Seitenverhältnis einpassen (nichts gestaucht, nichts abgeschnitten); Rest schwarz
+      const vw = v.videoWidth, vh = v.videoHeight, sc = Math.min(W / vw, cH / vh), dw = Math.round(vw * sc), dh = Math.round(vh * sc);
+      g.fillStyle = '#000'; g.fillRect(0, gH, W, cH);
+      g.drawImage(v, 0, 0, vw, vh, Math.round((W - dw) / 2), gH + Math.round((cH - dh) / 2), dw, dh);
     } else { g.fillStyle = '#111'; g.fillRect(0, gH, W, cH); g.fillStyle = '#888'; g.font = '700 40px system-ui, sans-serif'; g.textAlign = 'center'; g.fillText('Lenkrad-Kamera getrennt', W / 2, gH + cH / 2); g.textAlign = 'left'; }
     g.fillStyle = '#000'; g.fillRect(0, gH - 3, W, 6);   // Trennlinie
     // Anzeige im Spielbild: Tempo und Drift-Punkte (die HTML-Anzeigen sind nicht Teil des Spielbilds)
@@ -186,7 +189,7 @@
       p.innerHTML = `<h3>📱 Lenkrad-Kamera (iPhone / Handy)</h3>
         <ol><li>Handy und PC im <b>selben WLAN</b>.</li>
         <li>QR-Code mit der <b>Handy-Kamera</b> scannen – oder am Handy <b class="url"></b> öffnen und den Code <span class="code"></span> eingeben.</li>
-        <li>Am Handy <b>„Kamera starten“</b>, Handy <b>quer</b> hinstellen und aufs Lenkrad richten.</li>
+        <li>Am Handy <b>„Kamera starten“</b> und aufs Lenkrad richten (quer oder hochkant – das Bild behält sein echtes Format).</li>
         <li>Zurück ins Spiel, <b>F9</b> = Aufnahme: oben das Spiel, unten das Lenkrad – gleichzeitig aufgenommen.</li></ol>
         <img class="qr" alt="QR-Code">
         <div class="st wait"></div><video muted playsinline autoplay></video>

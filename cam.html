@@ -22,7 +22,7 @@
 <div id="wrap">
   <div id="view"><canvas id="cv" width="1280" height="720"></canvas></div>
   <div id="bar">
-    <div id="st">Handy <b>quer</b> hinstellen und aufs Lenkrad richten. Dann „Kamera starten“. Das Bild oben ist genau das, was im Video landet.</div>
+    <div id="st">Handy aufs Lenkrad richten (quer oder hochkant – beides geht). Dann „Kamera starten“. Das Bild oben landet genau so im Video, im echten Format.</div>
     <input id="code" placeholder="CODE" maxlength="6" autocomplete="off">
     <button id="go">📷 Kamera starten</button>
     <button id="rot" class="sec">↻ Drehen</button>
@@ -40,15 +40,15 @@ const q = new URLSearchParams(location.search); if (q.get('c')) $('code').value 
 const v = $('v'), cv = $('cv'), g = cv.getContext('2d');
 let cam = null, facing = 'environment', rot = 0, peer = null, call = null, out = null, loop = 0;
 try { rot = +localStorage.getItem('kzcam_rot') || 0; } catch (e) {}
-// Kamerabild → Leinwand (Querformat 16:9; Hochkant-Bilder werden mittig ausgeschnitten, nie gestaucht)
+// Kamerabild → Leinwand im ECHTEN Format der Kamera (nichts gestaucht, nichts abgeschnitten), längste Seite max. 1280 px
 function draw() {
   const vw = v.videoWidth, vh = v.videoHeight;
   if (vw && vh) {
-    const W = cv.width, H = cv.height, side = rot % 180 !== 0, iw = side ? vh : vw, ih = side ? vw : vh;   // Bildgröße nach dem Drehen
-    const sc = Math.max(W / iw, H / ih);
-    g.save(); g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
-    g.translate(W / 2, H / 2); g.rotate(rot * Math.PI / 180);
-    g.drawImage(v, -vw * sc / 2, -vh * sc / 2, vw * sc, vh * sc);
+    const side = rot % 180 !== 0, iw = side ? vh : vw, ih = side ? vw : vh;   // Bildgröße nach dem Drehen
+    const s = Math.min(1, 1280 / Math.max(iw, ih)), W = Math.round(iw * s / 2) * 2, H = Math.round(ih * s / 2) * 2;
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    g.save(); g.translate(W / 2, H / 2); g.rotate(rot * Math.PI / 180);
+    g.drawImage(v, -vw * s / 2, -vh * s / 2, vw * s, vh * s);
     g.restore();
   }
   loop = requestAnimationFrame(draw);
