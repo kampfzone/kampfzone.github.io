@@ -299,7 +299,6 @@ function frame(t) {
   const now = t / 1000;
   if (window.pollGamepad) pollGamepad(dt);   // Controller (gamepad.js)
   if (window.cullChunks) cullChunks(dt);     // große Karte: ferne Stücke ausblenden
-  if (window.grassTick) grassTick(dt);       // stehendes Gras um den Spieler (grass.js)
   if (running && myId) {
     updateLocal(dt, now);
     netTick(now);
@@ -317,6 +316,7 @@ function frame(t) {
   updateEffects(dt);
   updateVehicles(dt);
   updateAtmosphere(dt);
+  if (window.grassTick) grassTick(dt);       // stehendes Gras um den Spieler (grass.js) – nach dem Bewegen, damit es zur Kamera passt
   ambientTick(dt);   // Wind, Vögel, Stadtrauschen
   const sunMoved = followSun(camera.position.x, camera.position.z);
   // Grafik „Leistung“: Schatten nur ~10× pro Sekunde neu zeichnen (und sofort, wenn der Schattenbereich mitwandert)
