@@ -434,7 +434,7 @@ function clientHandle(m) {
   } else if (m.t === 'nade') {
     if (m.id !== myId) startNade(m.i, new THREE.Vector3(...m.o), new THREE.Vector3(...m.v), false, m.imp);
   } else if (m.t === 'rkt') {
-    if (m.id !== myId) fireRocket(new THREE.Vector3(...m.o), new THREE.Vector3(...m.v), false, m.w, vehicles.findIndex(x => x.d === m.id));
+    if (m.id !== myId) fireRocket(new THREE.Vector3(...m.o), new THREE.Vector3(...m.v), false, m.w, vehicles.findIndex(x => x.d === m.id), m.tg >= 0 ? m.tg : -1);
   } else if (m.t === 'vboom') {   // Fahrzeug explodiert
     const v = vehicles[m.v]; if (!v) return;
     if (ride.v === m.v) exitRide(true);

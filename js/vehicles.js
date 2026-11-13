@@ -375,6 +375,66 @@ function makePlane(i) {
   const dummy = new THREE.Group();
   return { root, spinners: [], fronts: [], prop, steer: dummy, stand: dummy, wf: dummy, wr: dummy, plane: true };
 }
+/* ---------- Kampfjet (moderner Mehrzweck-Jäger, vorne = +x, ~17 m lang, 11 m Spannweite) ----------
+   Spitze Radarnase, goldene Kanzel, seitliche Lufteinläufe, gepfeilte Flügel, Doppel-Seitenleitwerk,
+   zwei Triebwerke mit Nachbrennerflamme (wird mit dem Schub länger), Raketen unter den Flügeln */
+const JET_COLS = [[0x7d858f, 0x5c636c], [0x5f6b78, 0x434c56]];
+const JET_GLASS = new THREE.MeshStandardMaterial({ color: 0xb08a3a, roughness: 0.08, metalness: 0.9, envMapIntensity: 1.6 });   // goldbedampfte Kanzel
+const JET_FLAME = new THREE.MeshBasicMaterial({ color: 0xff9a40, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
+const JET_FLAME_IN = new THREE.MeshBasicMaterial({ color: 0x9fd0ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+function makeJet(i) {
+  const [c0, c1] = JET_COLS[i % JET_COLS.length];
+  const G = new THREE.MeshStandardMaterial({ color: c0, roughness: 0.55, metalness: 0.35 }), Gd = new THREE.MeshStandardMaterial({ color: c1, roughness: 0.6, metalness: 0.3 });
+  const D = HELI_MAT.dark, Wm = PLANE_WHITE, Y = new THREE.MeshStandardMaterial({ color: 0xe0b532, roughness: 0.6 });
+  const root = new THREE.Group(); root.rotation.order = 'YXZ';
+  const alongX = (geo, mat, x, y, z, sign = -1) => ({ geo, mat, p: [x, y, z], r: [0, 0, sign * Math.PI / 2] });   // Zylinder/Kegel entlang x (Spitze nach +x)
+  // Grundriss [x, z] als flache Platte (Flügel, Höhenleitwerk); mirror = linke Seite
+  const plan = (pts, y, th, mat, mirror) => {
+    const s = new THREE.Shape(); pts.forEach((p, k) => { const zz = mirror ? -p[1] : p[1]; if (k) s.lineTo(p[0], zz); else s.moveTo(p[0], zz); });
+    const g = new THREE.ExtrudeGeometry(s, { depth: th, bevelEnabled: true, bevelThickness: th * 0.3, bevelSize: th * 0.25, bevelSegments: 1 });
+    g.rotateX(Math.PI / 2); g.translate(0, y + th / 2, 0); return { geo: g, mat, p: [0, 0, 0], r: [0, 0, 0] };
+  };
+  const fin = (pts, th, mat, z, cant) => {   // Seitenleitwerk: Umriss [x, y], nach außen geneigt
+    const s = new THREE.Shape(); pts.forEach((p, k) => k ? s.lineTo(p[0], p[1]) : s.moveTo(p[0], p[1]));
+    const g = new THREE.ExtrudeGeometry(s, { depth: th, bevelEnabled: true, bevelThickness: th * 0.3, bevelSize: th * 0.25, bevelSegments: 1 }); g.translate(0, 0, -th / 2);
+    return { geo: g, mat, p: [0, 2.15, z], r: [cant, 0, 0] };
+  };
+  const body = [
+    alongX(new THREE.ConeGeometry(0.62, 3.4, 18), Gd, 7.0, 1.75, 0),                                   // Radarnase
+    alongX(new THREE.CylinderGeometry(0.62, 0.86, 4.2, 18), G, 3.2, 1.75, 0),                          // vorderer Rumpf
+    B(7.6, 1.25, 2.3, G, -2.4, 1.7, 0), B(4.6, 0.5, 1.0, G, 0.4, 2.42, 0),                              // Mittel-/Hinterrumpf, Rücken
+    SPH(1, JET_GLASS, 3.65, 2.42, 0, 1.75, 0.56, 0.56), B(0.25, 0.5, 0.9, D, 2.0, 2.45, 0),            // Kanzel, Kanzelrahmen hinten
+    B(2.6, 1.0, 0.8, G, 1.2, 1.45, 1.25), B(2.6, 1.0, 0.8, G, 1.2, 1.45, -1.25),                        // Lufteinläufe
+    B(0.06, 0.85, 0.65, D, 2.52, 1.45, 1.25), B(0.06, 0.85, 0.65, D, 2.52, 1.45, -1.25),
+    plan([[1.6, 1.05], [-3.6, 5.4], [-4.6, 5.4], [-4.4, 1.05]], 1.52, 0.16, G), plan([[1.6, 1.05], [-3.6, 5.4], [-4.6, 5.4], [-4.4, 1.05]], 1.52, 0.16, G, true),   // Flügel
+    plan([[3.4, 0.62], [1.6, 1.3], [0.4, 1.15], [0.4, 0.62]], 1.62, 0.1, G), plan([[3.4, 0.62], [1.6, 1.3], [0.4, 1.15], [0.4, 0.62]], 1.62, 0.1, G, true),          // Vorflügel-Wurzel
+    plan([[-5.2, 1.0], [-7.2, 3.3], [-7.9, 3.3], [-7.6, 1.0]], 1.58, 0.12, Gd), plan([[-5.2, 1.0], [-7.2, 3.3], [-7.9, 3.3], [-7.6, 1.0]], 1.58, 0.12, Gd, true),     // Höhenleitwerk
+    fin([[-4.4, 0], [-6.6, 2.9], [-7.4, 2.9], [-7.5, 0]], 0.14, Gd, 1.05, 0.3), fin([[-4.4, 0], [-6.6, 2.9], [-7.4, 2.9], [-7.5, 0]], 0.14, Gd, -1.05, -0.3),         // Doppel-Seitenleitwerk
+    B(1.0, 0.35, 0.16, Y, -6.9, 4.7, 1.82, 0.3, 0, 0), B(1.0, 0.35, 0.16, Y, -6.9, 4.7, -1.82, -0.3, 0, 0),                                                          // gelbe Leitwerk-Spitzen
+    alongX(new THREE.CylinderGeometry(0.55, 0.62, 1.3, 16), D, -6.7, 1.65, 0.62), alongX(new THREE.CylinderGeometry(0.55, 0.62, 1.3, 16), D, -6.7, 1.65, -0.62),     // Schubdüsen
+    alongX(new THREE.CylinderGeometry(0.44, 0.44, 0.05, 14), JET_FLAME, -7.36, 1.65, 0.62), alongX(new THREE.CylinderGeometry(0.44, 0.44, 0.05, 14), JET_FLAME, -7.36, 1.65, -0.62),   // Glühen in der Düse
+    // Fahrwerk: Bugrad, Hauptfahrwerk
+    CY(0.07, 1.25, D, 5.6, 0.85, 0), { geo: new THREE.CylinderGeometry(0.3, 0.3, 0.22, 14), mat: TIRE, p: [5.6, 0.3, 0], r: [Math.PI / 2, 0, 0] },
+  ];
+  for (const s of [-1, 1]) {
+    body.push(CY(0.09, 1.15, D, -1.2, 0.85, s * 1.45), { geo: new THREE.CylinderGeometry(0.38, 0.38, 0.28, 14), mat: TIRE, p: [-1.2, 0.38, s * 1.5], r: [Math.PI / 2, 0, 0] });
+    for (const zz of [2.7, 4.0]) {   // Luft-Luft-Raketen an Pylonen
+      body.push(B(1.2, 0.22, 0.1, Gd, -1.0, 1.3, s * zz), alongX(new THREE.CylinderGeometry(0.11, 0.11, 2.8, 10), Wm, -1.1, 1.08, s * zz), alongX(new THREE.ConeGeometry(0.11, 0.4, 10), D, 0.5, 1.08, s * zz),
+        B(0.4, 0.5, 0.03, Wm, -2.35, 1.08, s * zz), B(0.4, 0.03, 0.5, Wm, -2.35, 1.08, s * zz));
+    }
+  }
+  root.add(partsToGroup(body, true));
+  // Nachbrenner: zwei Flammen hinter den Düsen (Länge = Schub)
+  const burner = new THREE.Group(); burner.position.set(-7.4, 1.65, 0);
+  for (const z of [0.62, -0.62]) {
+    const f = new THREE.Mesh(new THREE.ConeGeometry(0.45, 3, 14, 1, true), JET_FLAME); f.rotation.z = Math.PI / 2; f.position.set(-1.5, 0, z); f.userData.noShadow = true; burner.add(f);
+    const fi = new THREE.Mesh(new THREE.ConeGeometry(0.26, 1.6, 12, 1, true), JET_FLAME_IN); fi.rotation.z = Math.PI / 2; fi.position.set(-0.8, 0, z); fi.userData.noShadow = true; burner.add(fi);
+  }
+  burner.scale.set(0.2, 1, 1); root.add(burner);
+  scene.add(root);
+  const dummy = new THREE.Group();
+  return { root, spinners: [], fronts: [], prop: dummy, burner, steer: dummy, stand: dummy, wf: dummy, wr: dummy, plane: true, jet: true };
+}
 // Folierung eines Autos tauschen (nur bei dir sichtbar)
 function setCarPaint(v, mat) {
   const m = v.mesh; if (!m.car || !mat || m.paint === mat) return;
@@ -570,8 +630,8 @@ function carParams(type) {
 const vehicles = MAP_VEHICLES.map((v, i) => {
   const kind = v.kind || 'moped';
   // Autotyp: an Drift-Strecken Drift-Autos, sonst abwechselnd Drift / Rennwagen / Muscle-Car (für alle Spieler gleich)
-  const ctype = kind === 'car' ? (v.ctype || ['drift', 'race', 'muscle'][i % 3]) : null;
-  const m = kind === 'tank' ? makeTank() : kind === 'heli' ? makeHeli() : kind === 'plane' ? makePlane(i) : kind !== 'car' ? makeMoped(MOPED_PAINTS[i % MOPED_PAINTS.length])
+  const ctype = kind === 'car' ? (v.ctype || ['drift', 'race', 'muscle'][i % 3]) : kind === 'plane' ? (v.ctype || null) : null;
+  const m = kind === 'tank' ? makeTank() : kind === 'heli' ? makeHeli() : kind === 'plane' ? (ctype === 'jet' ? makeJet(i) : makePlane(i)) : kind !== 'car' ? makeMoped(MOPED_PAINTS[i % MOPED_PAINTS.length])
     : ctype === 'f1' ? makeF1(F1_PAINTS[i % 4])
     : ctype === 'race' ? makeCar(RACE_PAINTS[i % 4], SILVER_RIM, 'race')
     : ctype === 'muscle' ? makeCar(MUSCLE_PAINTS[i % 4], CAR_BLACK, 'muscle')
@@ -728,7 +788,7 @@ function rocketVehicleHit(p, dir, maxD, skip) {
     if (t < -R || t > maxD + R) continue;
     const d2 = ox * ox + oy * oy + oz * oz - t * t; if (d2 > R * R) continue;
     const th = Math.max(0, t - Math.sqrt(R * R - d2));
-    if (th <= maxD && (best === null || th < best)) best = th;
+    if (th <= maxD && (best === null || th < best)) { best = th; lastVehHit = v.i; }
   }
   return best;
 }
@@ -751,7 +811,8 @@ function startRide(i) {
     const ct = CAR_TYPES[ride.ctype];
     showMsg(TOUCH ? ct.name : `${ct.name}: ${ct.info}  ·  ${kbK('tune')} = Tuning`);   // Handy: kurz halten
   } else if (v.kind === 'tank') showMsg('PANZER!  Maus = Turm · Linksklick = Kanone · W/S fahren · A/D drehen · E aussteigen');
-  else if (v.kind === 'plane') { ride.thrl = 0; ride.pitch = 0; ride.planeV = 0; ride.bombs = PLANE_BOMBS; ride.bombReload = 0; ride.rkts = PLANE_RKTS; ride.rktReload = 0; ride.bombHeld = false; showMsg(TOUCH ? 'FLUGZEUG!  ▲ Gas · ▲ZIEHEN ab ~90 km/h = abheben · ◀ ▶ Kurven' : `FLUGZEUG!  ${kbK('forward')} Gas · ab ~90 km/h ${kbK('jump')} = hochziehen · ${kbK('crouch')} = Nase runter · ${kbK('left')}/${kbK('right')} Kurven`); }
+  else if (v.kind === 'plane' && v.ctype === 'jet') { ride.ctype = 'jet'; ride.thrl = 0; ride.pitch = 0; ride.planeV = 0; ride.gunAmmo = JET_AMMO; ride.gunReload = 0; ride.msl = JET_MSL; ride.mslReload = 0; ride.lock = -1; ride.gunHits = {}; showMsg(TOUCH ? 'KAMPFJET!  ▲ Gas (voll = Nachbrenner) · ▲ZIEHEN ab ~170 km/h · FEUER = Kanone · ZOOM = Rakete' : `KAMPFJET!  ${kbK('forward')} Schub (Vollgas = Nachbrenner) · ab ~170 km/h ${kbK('jump')} = hochziehen · Linksklick Kanone · Rechtsklick Lenkrakete`); }
+  else if (v.kind === 'plane') { ride.ctype = 'plane'; ride.thrl = 0; ride.pitch = 0; ride.planeV = 0; ride.bombs = PLANE_BOMBS; ride.bombReload = 0; ride.rkts = PLANE_RKTS; ride.rktReload = 0; ride.bombHeld = false; showMsg(TOUCH ? 'FLUGZEUG!  ▲ Gas · ▲ZIEHEN ab ~90 km/h = abheben · ◀ ▶ Kurven' : `FLUGZEUG!  ${kbK('forward')} Gas · ab ~90 km/h ${kbK('jump')} = hochziehen · ${kbK('crouch')} = Nase runter · ${kbK('left')}/${kbK('right')} Kurven`); }
   else if (v.kind === 'heli') { ride.heliAmmo = HELI_AMMO; ride.heliReload = 0; ride.pitch = 0; showMsg('HELIKOPTER!  Leertaste = steigen · C = sinken · W/S vor/zurück · A/D drehen · Linksklick = Raketen'); }
   else showMsg(TOUCH ? 'Moped – WHEELIE antippen!' : 'Aufgestiegen!  W Gas · S Bremse · A/D lenken · Leertaste Wheelie (antippen!) · E absteigen');
 }
@@ -775,7 +836,7 @@ function exitRide(silent) {
   if (!placed) p.set(ride.pos.x, ride.pos.y + 0.05, ride.pos.z);
   me.pos.copy(p); me.vel.set(0, 0, 0);
   if (v.kind === 'heli' || v.kind === 'plane') ride.pos.y = groundH(ride.pos.x, ride.pos.z, ride.pos.y);   // ohne Pilot landet der Heli/das Flugzeug (man selbst fällt aus der Höhe)
-  if (v.kind === 'plane') { ride.pitch = 0; ride.lean = 0; BOMB_AIM.visible = false; }
+  if (v.kind === 'plane') { ride.pitch = 0; ride.lean = 0; BOMB_AIM.visible = false; JET_LOCK.visible = false; ride.lock = -1; }
   net.send({ t: 'exit', v: ride.v, s: [ride.pos.x, ride.pos.y, ride.pos.z, ride.yaw] });
   v.x = ride.pos.x; v.y = ride.pos.y; v.z = ride.pos.z; v.yaw = ride.yaw; v.d = 0; v.lean = 0;
   rideLeft.v = ride.v; rideLeft.t = performance.now();
@@ -1056,8 +1117,108 @@ function planeBombs(onG) {
   }
   ride.bombHeld = bombKey;
 }
+/* ---------- Kampfjet: viel schneller und wendiger, Vollgas = Nachbrenner; Bordkanone + Lenkraketen ---------- */
+const JET = { stall: 40, rot: 46, vmax: 115, thrust: 15, ceil: 450 };
+const JET_K = Object.assign({}, VK.plane, { name: 'Kampfjet', camD: 17, camH: 4.4 });
+const JET_AMMO = 400, JET_GUN_RATE = 0.066, JET_GUN_RELOAD = 6, JET_MSL = 6, JET_MSL_RELOAD = 8;
+// Zielmarkierung (rote Ecken) über dem erfassten Fahrzeug
+const JET_LOCK = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  g.strokeStyle = '#ff2a1a'; g.lineWidth = 9; g.lineCap = 'square';
+  for (const [x, y, dx, dy] of [[10, 10, 1, 1], [118, 10, -1, 1], [10, 118, 1, -1], [118, 118, -1, -1]]) { g.beginPath(); g.moveTo(x, y + dy * 34); g.lineTo(x, y); g.lineTo(x + dx * 34, y); g.stroke(); }
+  g.beginPath(); g.arc(64, 64, 6, 0, 7); g.fillStyle = '#ff2a1a'; g.fill();
+  const t = new THREE.CanvasTexture(c);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
+  s.visible = false; s.renderOrder = 10; scene.add(s); return s;
+})();
+function jetHint() {
+  const v = ride.planeV || 0, alt = ride.pos.y - groundH(ride.pos.x, ride.pos.z, ride.pos.y), nowS = performance.now() / 1000;
+  const warn = alt > 2 && v < JET.stall + 4 ? ' <span style="color:#ff6b6b">⚠ ZU LANGSAM – Nase runter, Schub!</span>' : alt < 2 && v > JET.rot ? ` <span style="color:#7dff7a">✈ Jetzt ${TOUCH ? '▲ZIEHEN' : kbK('jump')} – abheben!</span>` : '';
+  const gr = ride.gunReload > nowS ? ride.gunReload - nowS : 0, mr = ride.mslReload > nowS ? ride.mslReload - nowS : 0;
+  const gun = `🔫 <b>${TOUCH ? 'FEUER' : 'Linksklick'}</b> Kanone ${gr > 0 ? `<span style="color:#ff9a3a">(lädt … ${gr.toFixed(1)} s)</span>` : `(${ride.gunAmmo})`}`;
+  const msl = `🚀 <b>${TOUCH ? 'ZOOM' : 'Rechtsklick'}</b> Lenkrakete ${mr > 0 ? `<span style="color:#ff9a3a">(lädt … ${mr.toFixed(1)} s)</span>` : `(${ride.msl}/${JET_MSL})`}${ride.lock >= 0 ? ' <span style="color:#ff5a4a"><b>🎯 ZIEL ERFASST</b></span>' : ''}`;
+  const ab = ride.thrl > 0.97 ? ' <span style="color:#ffb347">🔥 NACHBRENNER</span>' : '';
+  return `✈ <b>Kampfjet</b> · Schub ${Math.round((ride.thrl || 0) * 100)} %${ab} (<b>${kbK('forward')}/${kbK('back')}</b>) · <b>${kbK('jump')}</b> ziehen · <b>${kbK('crouch')}</b> drücken · <b>${kbK('left')}/${kbK('right')}</b> Rolle · ${gun} · ${msl} · <b>${kbK('ride')}</b> aussteigen${warn}`;
+}
+// Zielrichtung = Fadenkreuz (Kamera), Startpunkt am Jet; fwd/right = Achsen des Jets
+function jetAxes() {
+  const cp = Math.cos(ride.pitch || 0), fwd = new THREE.Vector3(Math.cos(ride.yaw) * cp, Math.sin(ride.pitch || 0), -Math.sin(ride.yaw) * cp);
+  const right = new THREE.Vector3(Math.sin(ride.yaw), 0, Math.cos(ride.yaw));
+  return { fwd, right };
+}
+const _jo = new THREE.Vector3(), _jr = new THREE.Vector3(), _ju = new THREE.Vector3(), _jf = new THREE.Vector3();
+let lastVehHit = -1;   // von rocketVehicleHit gesetzt: welches Fahrzeug getroffen wurde
+// Bordkanone: Dauerfeuer (~15 Schuss/s) genau aufs Fadenkreuz; Leuchtspur von der Nase. 8 Treffer zerstören ein Fahrzeug
+function jetCannon(now) {
+  if (ride.gunReload && now >= ride.gunReload) { ride.gunReload = 0; ride.gunAmmo = JET_AMMO; }
+  if (!me.trigger || ride.gunReload || now - (ride.gunShot || -9) < JET_GUN_RATE) return;
+  ride.gunShot = now;
+  camera.updateMatrixWorld(); camera.getWorldPosition(_jo); camera.matrixWorld.extractBasis(_jr, _ju, _jf); _jf.negate();
+  const dir = _jf.clone().addScaledVector(_jr, (Math.random() - 0.5) * 0.014).addScaledVector(_ju, (Math.random() - 0.5) * 0.014).normalize();
+  const origin = _jo.clone().addScaledVector(dir, JET_K.camD - 2);   // vor dem eigenen Jet beginnen
+  const R = 700, mh = rayMap(origin, dir, R); let maxD = mh ? mh.dist : R, end = null, what = 'map';
+  const parts = avatarParts(); ray.set(origin, dir); ray.far = maxD;
+  const ah = parts.length ? ray.intersectObjects(parts, false)[0] : null;
+  if (ah) { maxD = ah.distance; what = 'player'; }
+  lastVehHit = -1; const vt = rocketVehicleHit(origin, dir, maxD, ride.v);
+  if (vt !== null) { maxD = vt; what = 'veh'; }
+  end = origin.clone().addScaledVector(dir, maxD);
+  if (what === 'player' && ah.object.userData.pid && !friendly(ah.object.userData.pid)) {
+    net.send({ t: 'hit', target: ah.object.userData.pid, dmg: 20, w: JET_W, head: false }); bloodFx(end); showHitmarker(false);
+  } else if (what === 'veh' && lastVehHit >= 0) {
+    impactFx(end, dir.clone().negate()); showHitmarker(false);
+    const n = ride.gunHits[lastVehHit] = (ride.gunHits[lastVehHit] || 0) + 1;
+    if (n >= 8) { ride.gunHits[lastVehHit] = 0; const c = vehicles[lastVehHit].mesh.root.position; blast(new THREE.Vector3(c.x, c.y + 1.2, c.z), true, PLANE_W, 2.5, 40); }
+  } else if (mh && what === 'map') impactFx(mh.point, mh.normal);
+  const { fwd, right } = jetAxes(), side = (ride.gunSide = -(ride.gunSide || 1));
+  const mz = ride.pos.clone().addScaledVector(fwd, 6.8).addScaledVector(right, 0.55 * side).add(new THREE.Vector3(0, 1.75, 0));
+  if ((ride.gunN = (ride.gunN || 0) + 1) % 2 === 0) addTracer(mz, end);
+  const fl = new THREE.Sprite(flashMat.clone()); fl.position.copy(mz); fl.scale.set(1.1, 1.1, 1); fl.material.rotation = Math.random() * 6;
+  scene.add(fl); effects.push({ o: fl, life: 0.05, max: 0.05 });
+  net.send({ t: 'shot', id: myId, w: 9, o: [+mz.x.toFixed(2), +mz.y.toFixed(2), +mz.z.toFixed(2)], e: [[+end.x.toFixed(2), +end.y.toFixed(2), +end.z.toFixed(2)]] });
+  sndShot(9, 0.42); me.shake = Math.max(me.shake, 0.06);
+  if (--ride.gunAmmo <= 0) ride.gunReload = now + JET_GUN_RELOAD;
+}
+// Lenkraketen: zielen aufs Fahrzeug unter dem Fadenkreuz (Kegel ~11°, bis 800 m, freie Sicht) und fliegen ihm hinterher
+function jetLockTarget() {
+  camera.getWorldPosition(_jo); camera.matrixWorld.extractBasis(_jr, _ju, _jf); _jf.negate();
+  let best = -1, bs = 0.19;
+  for (const v of vehicles) {
+    if (v.i === ride.v || v.wreck || !v.mesh.root.visible) continue;
+    const H = VEH_HIT[v.kind] || VEH_HIT.car, c = v.mesh.root.position, to = new THREE.Vector3(c.x - _jo.x, c.y + H.h - _jo.y, c.z - _jo.z), d = to.length();
+    if (d < 25 || d > 800) continue;
+    const ang = Math.acos(Math.min(1, to.dot(_jf) / d)); if (ang > bs) continue;
+    if (rayMap(_jo, to.clone().divideScalar(d), d - 4)) continue;   // Haus/Berg dazwischen
+    best = v.i; bs = ang;
+  }
+  return best;
+}
+function jetMissiles(now) {
+  if (ride.mslReload && now >= ride.mslReload) { ride.mslReload = 0; ride.msl = JET_MSL; }
+  camera.updateMatrixWorld();
+  ride.lock = jetLockTarget();
+  if (ride.lock >= 0) {
+    const t = vehicles[ride.lock].mesh.root.position, H = VEH_HIT[vehicles[ride.lock].kind] || VEH_HIT.car;
+    JET_LOCK.visible = true; JET_LOCK.position.set(t.x, t.y + H.h, t.z);
+    const s = Math.max(3, camera.position.distanceTo(JET_LOCK.position) * 0.07); JET_LOCK.scale.set(s, s, 1); JET_LOCK.material.rotation += 0.02;
+  } else JET_LOCK.visible = false;
+  const press = me.scoped && !ride.mslHeld; ride.mslHeld = me.scoped;
+  if (!press || ride.mslReload || ride.msl <= 0 || now - (ride.mslShot || -9) < 0.45) return;
+  ride.mslShot = now; ride.mslSide = -(ride.mslSide || 1);
+  const { fwd, right } = jetAxes();
+  const pod = ride.pos.clone().addScaledVector(right, 3.3 * ride.mslSide).addScaledVector(fwd, 0.3).add(new THREE.Vector3(0, 1.0, 0));
+  const dir = _jf.clone();
+  fireRocket(pod, dir.multiplyScalar(110 + Math.max(0, ride.vel.dot(dir))), true, PLANE_W, ride.v, ride.lock);
+  sndShot(10, 0.5); me.shake = Math.max(me.shake, 0.15);
+  if (--ride.msl <= 0) ride.mslReload = now + JET_MSL_RELOAD;
+}
+function jetWeapons(onG) {
+  const now = performance.now() / 1000;
+  if (onG && (ride.planeV || 0) < 3 && (ride.gunAmmo < JET_AMMO || ride.msl < JET_MSL)) { ride.gunAmmo = JET_AMMO; ride.gunReload = 0; ride.msl = JET_MSL; ride.mslReload = 0; }   // gelandet: neu beladen
+  jetCannon(now); jetMissiles(now);
+}
 function planeRide(dt) {
-  const K = VK.plane, P = PLANE;
+  const jet = ride.ctype === 'jet', K = jet ? JET_K : VK.plane, P = jet ? JET : PLANE;
   let thr = (keys.KeyW || keys.Gas ? 1 : 0) - (keys.KeyS ? 1 : 0), steer = (keys.KeyA ? 1 : 0) - (keys.KeyD ? 1 : 0);
   if (touchIn.my) thr = -touchIn.my;
   if (touchIn.mx) steer = -touchIn.mx;
@@ -1067,28 +1228,30 @@ function planeRide(dt) {
   ride.thrl = Math.max(0, Math.min(1, (ride.thrl || 0) + thr * (thr > 0 ? 0.55 : 0.8) * dt));
   let v = ride.planeV || 0;
   const pitch0 = ride.pitch || 0;
-  const flaps = (0.35 - Math.min(0.35, ride.thrl)) * 0.06 * v;   // wenig Gas: Landeklappen → langsamer anfliegen (~95 km/h)
-  v += (ride.thrl * P.thrust - v * v * (P.thrust / (P.vmax * P.vmax)) - flaps - 9.81 * Math.sin(pitch0) - (onG ? 0.6 : 0)) * dt;
-  if (onG && thr < 0) v -= 8 * dt;   // Radbremse
+  const flaps = (0.35 - Math.min(0.35, ride.thrl)) * (jet ? 0.04 : 0.06) * v;   // wenig Gas: Landeklappen → langsamer anfliegen (~95 km/h)
+  const ab = jet && ride.thrl > 0.97, T = P.thrust * (ab ? 1.6 : 1), VM = P.vmax * (ab ? 1.35 : 1);   // Jet: Vollgas = Nachbrenner (~560 km/h)
+  v += (ride.thrl * T - v * v * (T / (VM * VM)) - flaps - 9.81 * Math.sin(pitch0) - (onG ? 0.6 : 0)) * dt;
+  if (onG && thr < 0) v -= (jet ? 14 : 8) * dt;   // Radbremse
   v = Math.max(0, v);
   const lift = Math.min(1.3, (v / P.stall) ** 2);
   if (onG) {
     // Rollen: Bugrad lenkt, Nase hoch erst ab Abhebetempo
-    ride.yaw += steer * 0.7 * Math.min(1, v / 4) * Math.max(0.25, 1 - v / 40) * dt;
+    ride.yaw += steer * 0.7 * Math.min(1, v / 4) * Math.max(0.25, 1 - v / (jet ? 70 : 40)) * dt;
     const want = pull > 0 && v > P.rot ? 0.14 : 0;
     ride.pitch = pitch0 + (want - pitch0) * Math.min(1, 4 * dt);
     ride.lean += (0 - ride.lean) * Math.min(1, 6 * dt);
   } else {
     // In der Luft: Querlage → Kurve, Höhenruder → Nase hoch/runter (wirkt erst mit Fahrt), ohne Eingabe langsam waagerecht
-    const auth = Math.min(1, v / 20);
+    const auth = Math.min(1, v / (jet ? 35 : 20));
     // wendig wie ein Kunstflug-Kleinflugzeug: bis ~60° Querlage, schnelles Rollen; Ziehen in der Querlage = noch engere Kurve
-    ride.lean += ((-steer * 1.05) - ride.lean) * Math.min(1, 3.6 * dt);
+    // Kampfjet: bis ~72° Querlage, sehr schnelle Rolle; voll gezogene Kurve bei 400 km/h ≈ 120 m Radius
+    ride.lean += ((-steer * (jet ? 1.25 : 1.05)) - ride.lean) * Math.min(1, (jet ? 5.5 : 3.6) * dt);
     const bank = Math.sin(ride.lean), pullT = Math.max(0, pull) * Math.abs(bank);
-    ride.yaw += -bank * (0.62 + 6 / Math.max(v, 15) + pullT * 0.45) * auth * dt;   // Wendekreis bei 145 km/h ≈ 60 m (vorher ≈ 190 m)
-    let p = pitch0 + pull * 0.6 * auth * Math.cos(ride.lean) * dt;   // in Schräglage zieht das Höhenruder eher in die Kurve als nach oben
+    ride.yaw += -bank * (jet ? 0.38 + 5 / Math.max(v, 30) + pullT * 0.6 : 0.62 + 6 / Math.max(v, 15) + pullT * 0.45) * auth * dt;   // Wendekreis bei 145 km/h ≈ 60 m (vorher ≈ 190 m)
+    let p = pitch0 + pull * (jet ? 0.85 : 0.6) * auth * Math.cos(ride.lean) * dt;   // in Schräglage zieht das Höhenruder eher in die Kurve als nach oben
     if (!pull) p += (-0.13 * (1 - ride.thrl) - p) * Math.min(1, 0.7 * dt);   // loslassen: waagerecht, mit wenig Gas sanfter Gleitflug
     if (lift < 0.85) p += (-0.45 - p) * (0.85 - lift) * 2.2 * dt;   // Strömungsabriss: Nase fällt
-    ride.pitch = Math.max(-0.6, Math.min(0.45, p));
+    ride.pitch = Math.max(jet ? -0.8 : -0.6, Math.min(jet ? 0.75 : 0.45, p));
   }
   // Bewegung entlang der Nase; zu wenig Auftrieb = zusätzliches Sinken
   const fx = Math.cos(ride.yaw), fz = -Math.sin(ride.yaw), cp = Math.cos(ride.pitch);
@@ -1107,13 +1270,13 @@ function planeRide(dt) {
   // Aufsetzen / Bruchlandung / Aufprall
   let crash = ride.blocked && v > 8;
   if (!onG && nowOnG) {
-    if (vyBefore < -6 || Math.abs(ride.lean) > 0.5 || ride.pitch < -0.25) crash = true;
+    if (vyBefore < (jet ? -8 : -6) || Math.abs(ride.lean) > 0.5 || ride.pitch < -0.25) crash = true;
     else { sndThud(0.35); showMsg(v > 15 ? '✈ Gelandet – S zum Bremsen' : '✈ Gelandet'); ride.pitch = 0; }
   }
   if (crash) {
     sndThud(1); me.shake = Math.max(me.shake, 1);
     for (let k = 0; k < 8; k++) puff(new THREE.Vector3(ride.pos.x + rnd(-2, 2), ride.pos.y + 1, ride.pos.z + rnd(-2, 2)), k % 2 ? 0x333333 : 0xff8a20, 0.8, 1.6, new THREE.Vector3(rnd(-2, 2), 2, rnd(-2, 2)), { opacity: 0.7, grow: 3 });
-    showMsg('💥 BRUCHLANDUNG! Das Flugzeug ist wieder heil – vorsichtiger landen'); v = 0; ride.thrl = 0; ride.pitch = 0; ride.lean = 0;
+    showMsg(jet ? '💥 BRUCHLANDUNG! Der Jet ist wieder heil – flacher und langsamer aufsetzen' : '💥 BRUCHLANDUNG! Das Flugzeug ist wieder heil – vorsichtiger landen'); v = 0; ride.thrl = 0; ride.pitch = 0; ride.lean = 0;
     ride.pos.y = groundH(ride.pos.x, ride.pos.z, ride.pos.y + 300);
   }
   if (ride.pos.y < -10) ride.pos.set(950, 1, 300);
@@ -1131,9 +1294,10 @@ function planeRide(dt) {
   camera.position.copy(target).addScaledVector(back, dist);
   camera.rotation.set(me.pitch, me.yaw, ride.lean * 0.35);
   me.shake = Math.max(0, me.shake - dt * 1.6);
-  camera.fov += ((fovBase + Math.min(12, v * 0.18)) - camera.fov) * Math.min(1, dt * 6); camera.updateProjectionMatrix();
-  engineSound(true, v, ride.thrl, 'plane');
-  planeBombs(nowOnG);
+  camera.fov += ((fovBase + Math.min(jet ? 15 : 12, v * (jet ? 0.11 : 0.18))) - camera.fov) * Math.min(1, dt * 6); camera.updateProjectionMatrix();
+  if (ab) me.shake = Math.max(me.shake, 0.04);   // Nachbrenner rüttelt leicht
+  engineSound(true, v, ride.thrl + (ab ? 0.35 : 0), jet ? 'jet' : 'plane');
+  if (jet) jetWeapons(nowOnG); else planeBombs(nowOnG);
   viewKnife.visible = false; viewNade.visible = false; viewGun.visible = false;
 }
 // Panzerkanone: Linksklick, 2,5 s Nachladen; Granate fliegt aus der Rohrmündung in Rohrrichtung
@@ -1400,7 +1564,12 @@ function updateVehicles(dt) {
   }
   for (const v of vehicles) {
     const m = v.mesh, K = VK[v.kind], isTank = v.kind === 'tank', isPlane = v.kind === 'plane', isHeli = v.kind === 'heli' || isPlane, isCar = v.kind === 'car' || isTank || isHeli;
-    if (isPlane) {   // Propeller: dreht je nach Gas (eigenes Flugzeug) bzw. solange jemand drin sitzt
+    if (isPlane && m.burner) {   // Kampfjet: Nachbrennerflamme wird mit dem Schub länger (Vollgas = Nachbrenner), flackert
+      const on = v.i === ride.v || !!v.d, th = on ? (v.i === ride.v ? (ride.thrl || 0) : (v.st || 0)) : 0;
+      const L = on ? 0.25 + th * 0.55 + (th > 0.97 ? 0.9 : 0) : 0.01;
+      v.flame = (v.flame || 0) + (L - (v.flame || 0)) * Math.min(1, dt * 6);
+      m.burner.visible = v.flame > 0.03 && !v.wreck; m.burner.scale.set(v.flame * (0.9 + Math.random() * 0.2), 1, 1);
+    } else if (isPlane) {   // Propeller: dreht je nach Gas (eigenes Flugzeug) bzw. solange jemand drin sitzt
       const on = v.i === ride.v || !!v.d, tgt = on ? 18 + 40 * (v.i === ride.v ? (ride.thrl || 0) : (v.st || 0.5)) : 0;
       v.rot = (v.rot || 0) + (tgt - (v.rot || 0)) * Math.min(1, dt * (on ? 1.5 : 0.5));
       m.prop.rotation.x += v.rot * dt;
@@ -1553,6 +1722,13 @@ function engineSound(on, speed = 0, thr = 0, kind = 'moped', squeal = false) {
     eng = { o, o2, f, g, kind };
   }
   const t = actx.currentTime, sp = Math.abs(speed);
+  if (kind === 'jet') {   // Düsentriebwerk: helles Heulen + Fauchen, mit Nachbrenner tiefes Donnern
+    eng.o.frequency.setTargetAtTime(70 + thr * 95 + sp * 0.25, t, 0.25);
+    eng.o2.frequency.setTargetAtTime(28 + thr * 34, t, 0.25);
+    eng.f.frequency.setTargetAtTime(650 + thr * 2400, t, 0.25);
+    eng.g.gain.setTargetAtTime(0.05 + thr * 0.055, t, 0.25);
+    return;
+  }
   if (kind === 'plane') {   // Kolbenmotor mit Propeller: sonores Brummen, höher mit mehr Gas
     eng.o.frequency.setTargetAtTime(48 + thr * 46 + sp * 0.2, t, 0.15);
     eng.o2.frequency.setTargetAtTime(22 + thr * 26, t, 0.15);

@@ -7,8 +7,8 @@ const me = { pos: new THREE.Vector3(0, 0, 0), vel: new THREE.Vector3(), yaw: 0, 
   crouch: false, crouchT: 0, slideT: 0, slideDir: new THREE.Vector3(), sneak: false, h: PH, nades: 2,
   knifeT: 0, throwT: 0, drawT: 0, inspectT: 0, pumpT: 0, boltT: 0, recoilP: 0, recoilY: 0, swayX: 0, swayY: 0, landT: 0, shake: 0, airVy: 0 };
 const START_WEAPON = 3;  // Pistole – alles andere muss man finden
-const MAX_NADES = 2, KNIFE_W = 20, NADE_W = 21, CAR_W = 22, TANK_W = 23, HELI_W = 24, BOMB_W = 25, PLANE_W = 26;
-const weaponShort = w => w === KNIFE_W ? 'MESSER' : w === NADE_W ? 'GRANATE' : w === CAR_W ? 'ÜBERFAHREN' : w === TANK_W ? 'PANZER' : w === HELI_W ? 'HELI' : w === BOMB_W ? 'BOMBE' : w === PLANE_W ? 'FLUGZEUG' : (WEAPONS[w] ? WEAPONS[w].short : '?');
+const MAX_NADES = 2, KNIFE_W = 20, NADE_W = 21, CAR_W = 22, TANK_W = 23, HELI_W = 24, BOMB_W = 25, PLANE_W = 26, JET_W = 27;
+const weaponShort = w => w === KNIFE_W ? 'MESSER' : w === NADE_W ? 'GRANATE' : w === CAR_W ? 'ÜBERFAHREN' : w === TANK_W ? 'PANZER' : w === HELI_W ? 'HELI' : w === BOMB_W ? 'BOMBE' : w === PLANE_W ? 'FLUGZEUG' : w === JET_W ? 'KAMPFJET' : (WEAPONS[w] ? WEAPONS[w].short : '?');
 let lastWTap = 0;
 let myId = null, isHost = false, running = false, locked = false, roomCode = '';
 let world = { players: {}, mode: 'ffa' };
@@ -543,18 +543,26 @@ function sndBombWhistle(pos) {
   g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.06 * o.g, t + 0.9); g.gain.linearRampToValueAtTime(0.0001, t + 3.3);
   osc.connect(g); g.connect(o.node); osc.start(t); osc.stop(t + 3.4);
 }
-function fireRocket(o, v, mine, w, skip) {   // skip = Fahrzeug des Schützen (wird nicht getroffen)
+function fireRocket(o, v, mine, w, skip, tgt) {   // skip = Fahrzeug des Schützen (wird nicht getroffen), tgt = Ziel einer Lenkrakete (Fahrzeug)
   const bomb = w === BOMB_W;
   const m = bomb ? makeBombMesh() : makeRocketMesh(); m.position.copy(o); m.lookAt(o.clone().add(v)); scene.add(m);
   if (skip === undefined) skip = mine && typeof ride !== 'undefined' ? ride.v : -1;
-  rockets.push({ m, pos: o.clone(), vel: v.clone(), t: 0, mine, w, smoke: 0, skip, bomb });
+  const tg = tgt >= 0 ? tgt : -1;
+  rockets.push({ m, pos: o.clone(), vel: v.clone(), t: 0, mine, w, smoke: 0, skip, bomb, tgt: tg });
   if (bomb) { sndClick(0.12, 0.5); sndBombWhistle(o); }
-  if (mine) net.send({ t: 'rkt', o: [o.x, o.y, o.z], v: [v.x, v.y, v.z], w });
+  if (mine) net.send(tg >= 0 ? { t: 'rkt', o: [o.x, o.y, o.z], v: [v.x, v.y, v.z], w, tg } : { t: 'rkt', o: [o.x, o.y, o.z], v: [v.x, v.y, v.z], w });
 }
 function updateRockets(dt) {
   for (let i = rockets.length - 1; i >= 0; i--) {
     const r = rockets[i]; r.t += dt;
     if (r.bomb) { r.vel.y -= 9.81 * dt; r.vel.multiplyScalar(1 - 0.02 * dt); }   // Bombe fällt (behält den Schwung des Flugzeugs)
+    else if (r.tgt >= 0 && typeof vehicles !== 'undefined' && vehicles[r.tgt] && !vehicles[r.tgt].wreck && r.t > 0.15) {   // Lenkrakete: dreht zum Ziel (max. ~2,6 rad/s)
+      const tv = vehicles[r.tgt], c = tv.mesh.root.position, hh = (VEH_HIT[tv.kind] || VEH_HIT.car).h;
+      const want = new THREE.Vector3(c.x - r.pos.x, c.y + hh - r.pos.y, c.z - r.pos.z).normalize(), sp = r.vel.length(), cur = r.vel.clone().divideScalar(sp || 1);
+      const ang = Math.acos(Math.max(-1, Math.min(1, cur.dot(want)))), turn = Math.min(1, (2.6 * dt) / Math.max(ang, 1e-4));
+      if (ang > 1e-4) r.vel.copy(cur.lerp(want, turn).normalize().multiplyScalar(sp));
+      r.m.lookAt(r.pos.clone().add(r.vel));
+    }
     const step = r.vel.clone().multiplyScalar(dt), len = step.length(), dir = step.clone().normalize();
     let hitP = null;
     const mh = rayMap(r.pos, dir, len);
@@ -570,7 +578,7 @@ function updateRockets(dt) {
     if (vt !== null) hitP = r.pos.clone().addScaledVector(dir, vt);
     const nx = r.pos.clone().add(step);
     if (!hitP && nx.y < groundH(nx.x, nx.z, nx.y) + 0.05) hitP = nx;
-    if (hitP || r.t > (r.bomb ? 15 : 3)) {
+    if (hitP || r.t > (r.bomb ? 15 : r.tgt >= 0 ? 6 : 3)) {
       const bp = hitP || r.pos;
       const small = r.w === HELI_W || r.w === PLANE_W;   // Heli-/Flugzeug-Raketen: kleiner als Raketenwerfer
       blast(bp, r.mine, r.w, r.bomb ? 12 : r.w === TANK_W ? 9 : small ? 6 : 8, r.bomb ? 200 : r.w === TANK_W ? 160 : small ? 110 : 150);

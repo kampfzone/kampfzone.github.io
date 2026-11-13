@@ -96,7 +96,7 @@ function updateHUD(dt) {
     if (ride.kind === 'tank') {
       const rl = Math.max(0, TANK_RELOAD - (nowS - (ride.tankShot || -9)));
       hudSet('rideHint', 'html', `🛡️ <b>Panzer</b> · Maus = Turm · <b>Linksklick</b> = Kanone ${rl > 0 ? `<span style="color:#ff9a3a">(lädt … ${rl.toFixed(1)} s)</span>` : '<span style="color:#7dff7a">(BEREIT)</span>'} · <b>${kbK('forward')}/${kbK('back')}</b> fahren · <b>${kbK('left')}/${kbK('right')}</b> drehen · <b>${kbK('ride')}</b> aussteigen`);
-    } else hudSet('rideHint', 'html', ride.kind === 'plane' ? planeHint() : heliHint());
+    } else hudSet('rideHint', 'html', ride.kind === 'plane' ? (ride.ctype === 'jet' ? jetHint() : planeHint()) : heliHint());
     hudSet('rideHint', 'display', 'block'); hudSet('speedo', 'display', 'block');
     hudSet('speedo', 'html', ride.kind === 'plane' ? `${Math.round((ride.planeV || 0) * 3.6)}<small>km/h · ${Math.max(0, Math.round(ride.pos.y - groundH(ride.pos.x, ride.pos.z, ride.pos.y)))} m Höhe</small>` : ride.kind === 'heli' ? `${Math.round(Math.hypot(ride.vel.x, ride.vel.z) * 3.6)}<small>km/h · ${Math.round(ride.pos.y)} m</small>` : `${Math.round(Math.abs(ride.speed) * 3.6)}<small>km/h</small>`);
     return;

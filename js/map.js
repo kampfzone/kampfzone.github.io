@@ -2420,6 +2420,9 @@ function weltAirport(road) {
   // Fliegbare Kleinflugzeuge: drei auf dem Vorfeld (Nase zum Rollweg), eines startbereit am Ostende der Bahn (Start nach Westen)
   MAP_VEHICLES.push({ x: 895, z: 140, yaw: -Math.PI / 2, kind: 'plane' }, { x: 918, z: 140, yaw: -Math.PI / 2, kind: 'plane' },
     { x: 905, z: 178, yaw: -Math.PI / 2, kind: 'plane' }, { x: 995, z: RZ + 8, yaw: Math.PI, kind: 'plane' });
+  // Zwei Kampfjets startbereit am Ostende der Bahn (Start nach Westen, 485 m Bahn reichen bei Vollgas locker)
+  MAP_VEHICLES.push({ x: 972, z: RZ - 12, yaw: Math.PI, kind: 'plane', ctype: 'jet' }, { x: 945, z: RZ + 14, yaw: Math.PI, kind: 'plane', ctype: 'jet' });
+  (window.MAP_POIS = window.MAP_POIS || []).push({ x: 960, z: RZ, t: '🛩' });
 }
 /* Ringstadt: Stadtteil zwischen Ringstraße (x 345) und Ostallee (x 480) – Altbau-Häuserzeilen, Hotels, Fan-Shops;
    verbindet die alte Karte nahtlos mit F1-Ring und Flughafen. Dazu Bebauung rund um Rennstrecke und Flughafen. */
