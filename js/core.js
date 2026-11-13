@@ -5,8 +5,8 @@ const PREFIX = 'kampfzone-arena-v1-';
 const TOUCH = matchMedia('(pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && matchMedia('(hover: none)').matches);
 if (TOUCH) document.body.classList.add('touch');
 
-/* Update-Prüfung: beim Veröffentlichen wird 20261113-171038 durch eine Versionsnummer ersetzt */
-const BUILD = '20261113-171038';
+/* Update-Prüfung: beim Veröffentlichen wird 20261113-175340 durch eine Versionsnummer ersetzt */
+const BUILD = '20261113-175340';
 // Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
 // Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
 const UPD = { newer: null };
@@ -593,6 +593,7 @@ function pbr(name, tile, opts = {}, rx = 1, ry = rx) {
   }, opts.mat || {}));
   if (opts.normalScale) m.normalScale.set(opts.normalScale, opts.normalScale);
   m.userData.tile = tile;
+  if (name === 'grass') m.userData.grassGround = true;   // Wiesenboden: hier wachsen stehende Halme (grass.js)
   return m;
 }
 // Container-Foto in andere Farbe umfärben (Details bleiben erhalten)
@@ -774,6 +775,7 @@ function roundedBoxGeo(w, h, d, r, m = 2, tile = 0) {
   geo.computeVertexNormals(); withUv2(geo);
   // Einfacheres Material für die weite Landschaft (schneller)
   const terrain = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: ptex('grass_diff.jpg', true, 250, 250), color: welt ? new THREE.Color(0.42, 0.68, 0.32) : new THREE.Color(0.62, 0.85, 0.45) }));
+  terrain.material.userData.grassGround = true;
   scene.add(terrain);
   window.terrainHeight = heightAt;
 })();

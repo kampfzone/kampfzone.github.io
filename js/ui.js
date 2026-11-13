@@ -299,6 +299,7 @@ function frame(t) {
   const now = t / 1000;
   if (window.pollGamepad) pollGamepad(dt);   // Controller (gamepad.js)
   if (window.cullChunks) cullChunks(dt);     // große Karte: ferne Stücke ausblenden
+  if (window.grassTick) grassTick(dt);       // stehendes Gras um den Spieler (grass.js)
   if (running && myId) {
     updateLocal(dt, now);
     netTick(now);
