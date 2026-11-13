@@ -324,6 +324,7 @@ function frame(t) {
   if (window.waterNormal) { window.waterNormal.offset.x += dt * 0.004; window.waterNormal.offset.y += dt * 0.0025; }
   skyMesh.position.copy(camera.position);
   renderer.render(scene, camera);
+  if (window.recFrame) recFrame();   // Videoaufnahme (record.js)
   fpsTick(t);
 }
 requestAnimationFrame(frame);
