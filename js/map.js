@@ -546,26 +546,34 @@ const MAP_PICKUPS = [];
 
 /* ======================= Karte „Tokio“: x/z -100 … 100, im Osten die Bucht ======================= */
 const TK_FONT = '"Yu Gothic UI","Yu Gothic","Meiryo","Hiragino Sans","Noto Sans JP",sans-serif';
+// Rauheit (G) / Metall (B) für Fassaden-Glanzbilder (siehe facadeCanvases weiter unten)
+const FRM = { wall: 'rgb(0,232,0)', brick: 'rgb(0,245,0)', frame: 'rgb(0,140,0)', sill: 'rgb(0,185,0)', glass: 'rgb(0,16,120)', lit: 'rgb(0,95,20)', curtain: 'rgb(0,215,0)', metal: 'rgb(0,80,170)' };
 // Hochhaus-Fassade mit Fensterraster (512 px = 16 m, 4 Etagen); einzelne Fenster leuchten
 function tkFacade(base, glass, frame, lit, style) {
-  const s = 512, c = document.createElement('canvas'), e = document.createElement('canvas'); c.width = c.height = e.width = e.height = s;
-  const g = c.getContext('2d'), ge = e.getContext('2d');
-  g.fillStyle = base; g.fillRect(0, 0, s, s); ge.fillStyle = '#000'; ge.fillRect(0, 0, s, s);
+  const s = 512, P = facadeCanvases(s), { g, ge } = P;
+  g.fillStyle = base; g.fillRect(0, 0, s, s);
   const isGlass = style === 'glass', cols = isGlass ? 8 : 5, fh = s / 4, cw = s / cols;
-  for (let f = 0; f < 4; f++) for (let k = 0; k < cols; k++) {
-    const x = k * cw + (isGlass ? 2 : cw * 0.18), y = f * fh + (isGlass ? 3 : fh * 0.22);
-    const w = isGlass ? cw - 4 : cw * 0.64, h = isGlass ? fh - 6 : fh * 0.56;
-    const on = Math.random() < lit;
-    g.fillStyle = on ? '#f1dca4' : glass; g.fillRect(x, y, w, h);
-    if (!on) { const gr = g.createLinearGradient(x, y, x + w, y + h); gr.addColorStop(0, 'rgba(255,255,255,.2)'); gr.addColorStop(0.55, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(x, y, w, h); }
-    else { ge.fillStyle = '#ffe2a0'; ge.fillRect(x, y, w, h); }
-    g.strokeStyle = frame; g.lineWidth = isGlass ? 3 : 4; g.strokeRect(x, y, w, h);
+  if (isGlass) P.r(0, 0, s, s, FRM.metal);   // Glasfassade: Pfosten aus Aluminium
+  else for (let i = 0; i < 6000; i++) { const v = 120 + Math.random() * 16 | 0; P.h(Math.random() * s, Math.random() * s, 2, 2, v); }   // Beton/Fliesen-Körnung
+  for (let f = 0; f < 4; f++) {
+    if (!isGlass) { g.fillStyle = 'rgba(0,0,0,.12)'; g.fillRect(0, f * fh + fh - 4, s, 4); P.h(0, f * fh + fh - 6, s, 4, 175); }   // Deckenband
+    for (let k = 0; k < cols; k++) {
+      const x = k * cw + (isGlass ? 3 : cw * 0.18), y = f * fh + (isGlass ? 4 : fh * 0.22);
+      const w = isGlass ? cw - 6 : cw * 0.64, h = isGlass ? fh - 8 : fh * 0.56;
+      const on = Math.random() < lit;
+      g.fillStyle = on ? '#f1dca4' : glass; g.fillRect(x, y, w, h); P.h(x, y, w, h, isGlass ? 92 : 40); P.r(x, y, w, h, on ? FRM.lit : FRM.glass);
+      if (!on) {
+        const gr = g.createLinearGradient(x, y, x + w * 0.8, y + h); gr.addColorStop(0, 'rgba(200,215,235,.28)'); gr.addColorStop(0.55, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(x, y, w, h);
+        if (Math.random() < 0.3) { g.fillStyle = 'rgba(200,200,195,.35)'; g.fillRect(x, y, w, h * (0.2 + Math.random() * 0.5)); P.r(x, y, w, h * 0.3, FRM.curtain); }   // Jalousie halb unten
+      } else { ge.fillStyle = '#ffe2a0'; ge.fillRect(x, y, w, h); }
+      if (!isGlass) { g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(x, y, w, 5); g.fillRect(x, y, 4, h); }   // Laibungsschatten
+      g.strokeStyle = frame; g.lineWidth = isGlass ? 3 : 4; g.strokeRect(x, y, w, h);
+      P.gh.strokeStyle = 'rgb(165,165,165)'; P.gh.lineWidth = isGlass ? 3 : 4; P.gh.strokeRect(x, y, w, h);
+      P.gr.strokeStyle = FRM.frame; P.gr.lineWidth = isGlass ? 3 : 4; P.gr.strokeRect(x, y, w, h);
+    }
   }
   speckle(g, s, 4000, '0,0,0', 0.07, 2);
-  const t = new THREE.CanvasTexture(halfOnTouch(c)), te = new THREE.CanvasTexture(halfOnTouch(e));   // Handy: halbe Auflösung (Speicher)
-  for (const q of [t, te]) { q.wrapS = q.wrapT = THREE.RepeatWrapping; q.anisotropy = MAX_ANISO; q.encoding = THREE.sRGBEncoding; }
-  return new THREE.MeshStandardMaterial({ map: t, emissive: 0xffffff, emissiveMap: te, emissiveIntensity: 0.5,
-    roughness: isGlass ? 0.18 : 0.75, metalness: isGlass ? 0.55 : 0.1, envMapIntensity: isGlass ? 1.5 : 1 });
+  return facadeMats(P, { ei: 0.5, env: isGlass ? 1.5 : 1.2, relief: isGlass ? 3 : 5 });
 }
 const TKM = {
   glassBlue: tkFacade('#3a4a5c', '#1c2d43', '#61728a', 0.12, 'glass'),
@@ -1522,50 +1530,112 @@ function towerLobby(x, z, w, d, h, mat, faceS) {
 }
 /* ---------- Altbau-Fassaden für die Stadt: Putz/Ziegel, Fenster mit Rahmen, Sprossen, Fensterbank, Gesims ----------
    512 px = 12,8 m: 4 Fensterachsen (je 3,2 m) × 4 Etagen (je 3,2 m) → Häuser in Vielfachen von 3,2 m passen genau */
+/* Gemalte Fassade mit echtem Relief und Glanz: vier Bilder werden parallel gemalt –
+   Farbe (c), Leuchten nachts (e), Höhe (hc: Wand 128, Glas tief, Rahmen/Gesims/Fensterbank erhaben) und
+   Rauheit/Metall (rc: G = Rauheit, B = Metall → Scheiben spiegeln den Himmel, Putz bleibt matt).
+   Aus dem Höhenbild wird eine Normal-Map: Fensterlaibungen, Rahmen, Gesimse und Fugen fangen echtes Licht und Schatten. */
+function facadeCanvases(s) {
+  const mk = () => { const c = document.createElement('canvas'); c.width = c.height = s; return c; };
+  const c = mk(), e = mk(), hc = mk(), rc = mk();
+  const P = { c, e, hc, rc, g: c.getContext('2d'), ge: e.getContext('2d'), gh: hc.getContext('2d'), gr: rc.getContext('2d') };
+  P.ge.fillStyle = '#000'; P.ge.fillRect(0, 0, s, s);
+  P.gh.fillStyle = '#808080'; P.gh.fillRect(0, 0, s, s);
+  P.gr.fillStyle = FRM.wall; P.gr.fillRect(0, 0, s, s);
+  P.h = (x, y, w, h, v) => { P.gh.fillStyle = `rgb(${v},${v},${v})`; P.gh.fillRect(x, y, w, h); };   // Höhe 0…255
+  P.r = (x, y, w, h, m) => { P.gr.fillStyle = m; P.gr.fillRect(x, y, w, h); };
+  return P;
+}
+function facadeMats(P, opt = {}) {
+  const tex = (cv, srgb) => { const t = new THREE.CanvasTexture(halfOnTouch(cv)); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = MAX_ANISO; if (srgb) t.encoding = THREE.sRGBEncoding; return t; };
+  const extra = {};
+  if (!TOUCH) {   // Handy: ohne Relief (Speicher)
+    const s = P.hc.width, src = P.gh.getImageData(0, 0, s, s).data, im = P.gh.createImageData(s, s), d = im.data, k = opt.relief || 5;
+    const H = (x, y) => src[((((y % s) + s) % s) * s + (((x % s) + s) % s)) * 4];
+    for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+      const nx = -(H(x + 1, y) - H(x - 1, y)) / 255 * k, ny = (H(x, y + 1) - H(x, y - 1)) / 255 * k, l = Math.hypot(nx, ny, 1), i = (y * s + x) * 4;
+      d[i] = (nx / l * 0.5 + 0.5) * 255; d[i + 1] = (ny / l * 0.5 + 0.5) * 255; d[i + 2] = (1 / l * 0.5 + 0.5) * 255; d[i + 3] = 255;
+    }
+    const nc = document.createElement('canvas'); nc.width = nc.height = s; nc.getContext('2d').putImageData(im, 0, 0);
+    extra.normalMap = tex(nc, false); extra.normalScale = new THREE.Vector2(1, 1);
+  }
+  const rm = tex(P.rc, false);
+  return new THREE.MeshStandardMaterial(Object.assign({ map: tex(P.c, true), emissive: 0xffffff, emissiveMap: tex(P.e, true), emissiveIntensity: opt.ei || 0.45,
+    roughness: 1, metalness: 1, roughnessMap: rm, metalnessMap: rm, envMapIntensity: opt.env || 1.25 }, extra));
+}
+// Fenster mit Laibung (tiefes Glas), Rahmen, Sprossen, Spiegelung, Schatten des Sturzes, Fensterbank und Schmutzfahne darunter
+function facadeWindow(P, x, y, w, h, frame, o = {}) {
+  const { g, ge } = P, on = o.lit;
+  g.fillStyle = frame; g.fillRect(x - 6, y - 6, w + 12, h + 12); P.h(x - 6, y - 6, w + 12, h + 12, 168); P.r(x - 6, y - 6, w + 12, h + 12, FRM.frame);
+  g.fillStyle = on ? '#f1d89c' : '#202a33'; g.fillRect(x, y, w, h); P.h(x, y, w, h, 38); P.r(x, y, w, h, on ? FRM.lit : FRM.glass);
+  if (on) { ge.fillStyle = '#ffd890'; ge.fillRect(x, y, w, h); }
+  else { const gr = g.createLinearGradient(x, y, x + w * 0.7, y + h); gr.addColorStop(0, 'rgba(190,210,230,.35)'); gr.addColorStop(0.5, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(x, y, w, h); }
+  if (!on && o.curtain) { g.fillStyle = 'rgba(232,226,210,.85)'; g.fillRect(x, y, w, h * 0.3); P.r(x, y, w, h * 0.3, FRM.curtain); P.h(x, y, w, h * 0.3, 60); }
+  g.fillStyle = 'rgba(0,0,0,.38)'; g.fillRect(x, y, w, 5); g.fillRect(x, y, 4, h);                 // Schatten in der Laibung (Sturz, Seite)
+  if (o.mullion !== false) {
+    g.fillStyle = frame; g.fillRect(x + w / 2 - 2, y, 4, h); g.fillRect(x, y + h * 0.33, w, 3);      // Sprossen
+    P.h(x + w / 2 - 2, y, 4, h, 150); P.h(x, y + h * 0.33, w, 3, 150); P.r(x + w / 2 - 2, y, 4, h, FRM.frame); P.r(x, y + h * 0.33, w, 3, FRM.frame);
+  }
+  if (o.sill !== false) {
+    const sg = g.createLinearGradient(0, y + h + 11, 0, y + h + 60); sg.addColorStop(0, 'rgba(40,34,28,.16)'); sg.addColorStop(1, 'rgba(40,34,28,0)');
+    g.fillStyle = sg; g.fillRect(x - 4, y + h + 11, w + 8, 49);                                       // Schmutzfahne unter der Bank
+    g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(x - 9, y + h + 11, w + 18, 4);
+    g.fillStyle = frame; g.fillRect(x - 10, y + h + 5, w + 20, 6); P.h(x - 10, y + h + 5, w + 20, 6, 222); P.r(x - 10, y + h + 5, w + 20, 6, FRM.sill);
+  }
+}
 function euFacade(base, frame, style) {
-  const s = 512, c = document.createElement('canvas'), e = document.createElement('canvas'); c.width = c.height = e.width = e.height = s;
-  const g = c.getContext('2d'), ge = e.getContext('2d');
-  g.fillStyle = base; g.fillRect(0, 0, s, s); ge.fillStyle = '#000'; ge.fillRect(0, 0, s, s);
-  if (style === 'brick') {   // Ziegelmauer
+  const s = 512, P = facadeCanvases(s), { g, ge } = P;
+  g.fillStyle = base; g.fillRect(0, 0, s, s);
+  if (style === 'brick') {   // Ziegelmauer mit vertieften Fugen
+    P.h(0, 0, s, s, 96);
     for (let y = 0; y < s; y += 8) for (let x = (y / 8) % 2 ? -8 : 0; x < s; x += 16) {
       const l = 0.82 + Math.random() * 0.3; g.fillStyle = `rgba(${150 * l | 0},${70 * l | 0},${52 * l | 0},1)`; g.fillRect(x + 1, y + 1, 14, 6);
+      P.h(x + 1, y + 1, 14, 6, 128 + (Math.random() * 14 | 0));
     }
+    P.r(0, 0, s, s, FRM.brick);
+  } else {   // Putz: feine Körnung, leicht fleckig
+    for (let i = 0; i < 9000; i++) { const v = 123 + Math.random() * 10 | 0; P.h(Math.random() * s, Math.random() * s, 2, 2, v); }
+    for (let i = 0; i < 40; i++) { const x = Math.random() * s, y = Math.random() * s, r = 20 + Math.random() * 60, gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,255,255'},.05)`); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x - r, y - r, 2 * r, 2 * r); }
   }
   speckle(g, s, 7000, '0,0,0', 0.06, 2); speckle(g, s, 2500, '255,255,255', 0.05, 2);
   const fh = s / 4, cw = s / 4;
   for (let f = 0; f < 4; f++) {
     const y0 = f * fh;
-    if (style === 'shop') {   // Erdgeschoss: große Schaufenster, Tür, dunkles Band oben
-      g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, y0 + 4, s, fh * 0.14);
+    if (style === 'shop') {   // Erdgeschoss: große Schaufenster mit Metallrahmen, Tür, dunkles Schildband oben
+      g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, y0 + 4, s, fh * 0.14); P.h(0, y0 + 4, s, fh * 0.14, 150);
       for (let k = 0; k < 4; k++) {
-        const x = k * cw + 9, w = cw - 18, y = y0 + fh * 0.22, h = fh * 0.74;
-        g.fillStyle = frame; g.fillRect(x - 4, y - 4, w + 8, h + 4);
-        const lit = Math.random() < 0.5;
-        g.fillStyle = lit ? '#cdbf98' : '#24303a'; g.fillRect(x, y, w, h);
-        const gr = g.createLinearGradient(x, y, x + w, y + h); gr.addColorStop(0, 'rgba(255,255,255,.28)'); gr.addColorStop(0.5, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(x, y, w, h);
-        if (lit) { ge.fillStyle = '#7a6a48'; ge.fillRect(x, y, w, h); }
-        if (k === 1) { g.fillStyle = frame; g.fillRect(x + w * 0.62, y, 4, h); g.fillStyle = '#3a2a1c'; g.fillRect(x + w * 0.66, y + 4, w * 0.3, h - 4); }   // Tür
+        const x = k * cw + 9, w = cw - 18, y = y0 + fh * 0.22, h = fh * 0.74, lit = Math.random() < 0.5;
+        g.fillStyle = frame; g.fillRect(x - 4, y - 4, w + 8, h + 4); P.h(x - 4, y - 4, w + 8, h + 4, 160); P.r(x - 4, y - 4, w + 8, h + 4, FRM.metal);
+        // Ladeninneres: warm beleuchtet (oder dunkel), Regale mit bunten Waren, Spiegelung auf der Scheibe
+        const ig = g.createLinearGradient(0, y, 0, y + h); ig.addColorStop(0, lit ? '#efe2c2' : '#2a333c'); ig.addColorStop(1, lit ? '#a8977a' : '#161d24');
+        g.fillStyle = ig; g.fillRect(x, y, w, h); P.h(x, y, w, h, 60); P.r(x, y, w, h, FRM.glass);
+        if (lit) { const eg = ge.createLinearGradient(0, y, 0, y + h); eg.addColorStop(0, '#8a7a58'); eg.addColorStop(1, '#4a3e2a'); ge.fillStyle = eg; ge.fillRect(x, y, w, h); }
+        for (const sy of [0.32, 0.56, 0.8]) {
+          const yy = y + h * sy; g.fillStyle = lit ? 'rgba(70,55,40,.75)' : 'rgba(0,0,0,.45)'; g.fillRect(x + 4, yy, w - 8, 4);
+          for (let px = x + 7; px < x + w - 12; px += 7 + Math.random() * 9) {
+            const ph = 8 + Math.random() * 16, hue = Math.random() * 360;
+            g.fillStyle = lit ? `hsl(${hue},55%,${45 + Math.random() * 20}%)` : `hsla(${hue},25%,22%,.8)`; g.fillRect(px, yy - ph, 5 + Math.random() * 4, ph);
+          }
+        }
+        const gr = g.createLinearGradient(x, y, x + w, y + h); gr.addColorStop(0, 'rgba(200,215,235,.32)'); gr.addColorStop(0.45, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(x, y, w, h);
+        g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(x, y, w, 4);
+        if (k === 1) { g.fillStyle = frame; g.fillRect(x + w * 0.62, y, 4, h); g.fillStyle = '#3a2a1c'; g.fillRect(x + w * 0.66, y + 4, w * 0.3, h - 4); P.h(x + w * 0.66, y + 4, w * 0.3, h - 4, 100); P.r(x + w * 0.66, y + 4, w * 0.3, h - 4, FRM.frame); }   // Tür
       }
       continue;
     }
-    // Gesims zwischen den Etagen
-    g.fillStyle = 'rgba(255,255,255,.22)'; g.fillRect(0, y0 + fh - 9, s, 5); g.fillStyle = 'rgba(0,0,0,.16)'; g.fillRect(0, y0 + fh - 4, s, 4);
+    // Gesims zwischen den Etagen (vorstehend)
+    g.fillStyle = 'rgba(255,255,255,.22)'; g.fillRect(0, y0 + fh - 9, s, 5); g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, y0 + fh - 4, s, 4);
+    P.h(0, y0 + fh - 10, s, 7, 200); P.h(0, y0 + fh - 3, s, 2, 150);
     for (let k = 0; k < 4; k++) {
       const w = cw * 0.4, h = fh * 0.5, x = k * cw + (cw - w) / 2, y = y0 + fh * 0.18;
-      if (style === 'deco') { g.fillStyle = frame; g.fillRect(x - 10, y - 16, w + 20, 7); g.beginPath(); g.moveTo(x - 6, y - 16); g.lineTo(x + w / 2, y - 28); g.lineTo(x + w + 6, y - 16); g.fill(); }
-      g.fillStyle = frame; g.fillRect(x - 6, y - 6, w + 12, h + 12);   // Rahmen
-      const on = Math.random() < 0.16;
-      g.fillStyle = on ? '#f1d89c' : '#26323d'; g.fillRect(x, y, w, h);
-      if (on) { ge.fillStyle = '#ffd890'; ge.fillRect(x, y, w, h); }
-      else { const gr = g.createLinearGradient(x, y, x + w, y + h); gr.addColorStop(0, 'rgba(255,255,255,.3)'); gr.addColorStop(0.55, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(x, y, w, h); }
-      if (!on && Math.random() < 0.35) { g.fillStyle = 'rgba(235,230,215,.8)'; g.fillRect(x, y, w, h * 0.3); }   // Gardine/Rollo
-      g.fillStyle = frame; g.fillRect(x + w / 2 - 2, y, 4, h); g.fillRect(x, y + h * 0.33, w, 3);   // Sprossen
-      g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(x - 9, y + h + 9, w + 18, 5); g.fillStyle = frame; g.fillRect(x - 10, y + h + 5, w + 20, 6);   // Fensterbank
+      if (style === 'deco') {   // Fensterverdachung (Dreiecksgiebel)
+        g.fillStyle = frame; g.fillRect(x - 10, y - 16, w + 20, 7); g.beginPath(); g.moveTo(x - 6, y - 16); g.lineTo(x + w / 2, y - 28); g.lineTo(x + w + 6, y - 16); g.fill();
+        P.h(x - 10, y - 16, w + 20, 7, 210); P.gh.fillStyle = 'rgb(195,195,195)'; P.gh.beginPath(); P.gh.moveTo(x - 6, y - 16); P.gh.lineTo(x + w / 2, y - 28); P.gh.lineTo(x + w + 6, y - 16); P.gh.fill();
+        g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(x - 10, y - 9, w + 20, 3);
+      }
+      facadeWindow(P, x, y, w, h, frame, { lit: Math.random() < 0.16, curtain: Math.random() < 0.35 });
     }
   }
-  const t = new THREE.CanvasTexture(halfOnTouch(c)), te = new THREE.CanvasTexture(halfOnTouch(e));   // Handy: halbe Auflösung (Speicher)
-  for (const q of [t, te]) { q.wrapS = q.wrapT = THREE.RepeatWrapping; q.anisotropy = MAX_ANISO; q.encoding = THREE.sRGBEncoding; }
-  return new THREE.MeshStandardMaterial({ map: t, emissive: 0xffffff, emissiveMap: te, emissiveIntensity: 0.45, roughness: 0.85 });
+  return facadeMats(P, { ei: 0.45 });
 }
 let EU = null;
 function euMats() {
@@ -1607,6 +1677,15 @@ function euMats() {
   }, 128, false), roughness: 0.6 });
   EU.door.map.encoding = THREE.sRGBEncoding;
   EU.pipe = new THREE.MeshStandardMaterial({ color: 0x8a8f94, roughness: 0.45, metalness: 0.6 });   // Regenfallrohr (Zink)
+  // Balkongeländer: Handlauf, Fußleiste, senkrechte Stäbe (durchsichtig dazwischen)
+  EU.rail = new THREE.MeshStandardMaterial({ map: (() => {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d');
+    g.fillStyle = '#2b2d30'; g.fillRect(0, 7, 256, 7); g.fillRect(0, 56, 256, 5);   // Handlauf (oben sichtbar bei 0,9 m Höhe), Fußleiste
+    for (let x = 10; x < 256; x += 26) g.fillRect(x, 7, 4, 57);                    // Stäbe alle 10 cm
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.wrapS = THREE.RepeatWrapping; t.anisotropy = MAX_ANISO; return t;
+  })(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.6 });
+  EU.plinth = new THREE.MeshStandardMaterial({ color: 0x77736c, roughness: 0.95 });   // Sockel (Naturstein-Grau)
+  EU.ridge = new THREE.MeshStandardMaterial({ color: 0x5a3a30, roughness: 0.8 });     // Firstziegel
   return EU;
 }
 const EU_SHOPS = ['METZGEREI', 'BLUMEN', 'EISCAFÉ', 'OPTIKER', 'SCHUHE', 'HANDYSHOP', 'REISEBÜRO', 'BIOLADEN', 'DROGERIE', 'IMBISS', 'BOUTIQUE', 'SPIELWAREN', 'BÄCKER', 'WEINHANDEL'];
@@ -1619,6 +1698,7 @@ function euHouse(cx, cz, w, d, floors, alongX, face) {
   addBox(cx, 0, cz, bx, FLOOR_H, bz, shop ? E.shops[Math.floor(srand() * E.shops.length)] : F.mat, 12.8, NRD);
   addBox(cx, FLOOR_H, cz, bx, top - FLOOR_H, bz, F.mat, 12.8, NRD);
   addBox(cx, FLOOR_H - 0.12, cz, bx + 0.16, 0.24, bz + 0.16, F.trim, 2, { decor: true, round: 0, shadow: false });   // Band über dem Erdgeschoss
+  addBox(cx, 0, cz, bx + 0.1, shop ? 0.22 : 0.55, bz + 0.1, E.plinth, 1, { decor: true, round: 0, shadow: false });   // Sockel
   addBox(cx, top, cz, bx + 0.45, 0.4, bz + 0.45, F.trim, 2, { decor: true, round: 0 });                            // Kranzgesims / Dachkante
   // Front-Hilfen: Punkt auf der Fassade zur Straße, Richtung entlang der Fassade
   const fx = alongX ? 0 : face, fz = alongX ? face : 0, ax = alongX ? 1 : 0, az = alongX ? 0 : 1, half = d / 2;
@@ -1644,7 +1724,8 @@ function euHouse(cx, cz, w, d, floors, alongX, face) {
     if (srand() > 0.22) continue;
     const u = -w / 2 + 1.6 + k * 3.2, y = f * FLOOR_H + 0.05;
     at(u, 0.5, y, 2.2, 0.14, 1.0, F.trim);
-    at(u, 0.97, y + 0.14, 2.2, 0.9, 0.05, MAT.metal);
+    at(u, 0.97, y + 0.14, 2.2, 0.9, 0.03, E.rail);                                  // Geländer vorne
+    for (const sd of [-1, 1]) at(u + sd * 1.09, 0.5, y + 0.14, 0.03, 0.9, 0.95, E.rail);   // Geländer seitlich
   }
   // Dach
   if (srand() < 0.6) {
@@ -1654,7 +1735,11 @@ function euHouse(cx, cz, w, d, floors, alongX, face) {
       if (alongX) { r.position.set(cx, y0 + rise / 2, cz + s * run / 2); r.rotation.x = s * ang; }
       else { r.position.set(cx + s * run / 2, y0 + rise / 2, cz); r.rotation.z = -s * ang; }
       r.castShadow = true; r.receiveShadow = true; scene.add(r);
+      // Dachrinne an der Traufe
+      if (alongX) addBox(cx, y0 - 0.12, cz + s * (run + 0.02), bx + 0.3, 0.14, 0.16, E.pipe, 1, { decor: true, round: 0, shadow: false });
+      else addBox(cx + s * (run + 0.02), y0 - 0.12, cz, 0.16, 0.14, bz + 0.3, E.pipe, 1, { decor: true, round: 0, shadow: false });
     }
+    addBox(cx, y0 + rise - 0.02, cz, alongX ? bx + 0.32 : 0.3, 0.16, alongX ? 0.3 : bz + 0.32, E.ridge, 1, { decor: true, round: 0, shadow: false });   // First
     const gable = new THREE.Shape(); gable.moveTo(-d / 2, 0); gable.lineTo(d / 2, 0); gable.lineTo(0, rise); gable.closePath();
     for (const s of [1, -1]) {
       const gm = new THREE.Mesh(withUv2(new THREE.ShapeGeometry(gable)), F.gable);
