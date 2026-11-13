@@ -811,7 +811,7 @@ function startRide(i) {
     const ct = CAR_TYPES[ride.ctype];
     showMsg(TOUCH ? ct.name : `${ct.name}: ${ct.info}  ·  ${kbK('tune')} = Tuning`);   // Handy: kurz halten
   } else if (v.kind === 'tank') showMsg('PANZER!  Maus = Turm · Linksklick = Kanone · W/S fahren · A/D drehen · E aussteigen');
-  else if (v.kind === 'plane' && v.ctype === 'jet') { ride.ctype = 'jet'; ride.thrl = 0; ride.pitch = 0; ride.planeV = 0; ride.gunAmmo = JET_AMMO; ride.gunReload = 0; ride.msl = JET_MSL; ride.mslReload = 0; ride.lock = -1; ride.gunHits = {}; showMsg(TOUCH ? 'KAMPFJET!  ▲ Gas (voll = Nachbrenner) · ▲ZIEHEN ab ~170 km/h · FEUER = Kanone · ZOOM = Rakete' : `KAMPFJET!  ${kbK('forward')} Schub (Vollgas = Nachbrenner) · ab ~170 km/h ${kbK('jump')} = hochziehen · Linksklick Kanone · Rechtsklick Lenkrakete`); }
+  else if (v.kind === 'plane' && v.ctype === 'jet') { ride.ctype = 'jet'; ride.thrl = 0; ride.pitch = 0; ride.planeV = 0; ride.q = null; ride.air = false; ride.camQ = null; ride.gunAmmo = JET_AMMO; ride.gunReload = 0; ride.msl = JET_MSL; ride.mslReload = 0; ride.lock = -1; ride.gunHits = {}; showMsg(TOUCH ? 'KAMPFJET!  ▲ Gas (voll = Nachbrenner) · ▲ZIEHEN ab ~170 km/h · FEUER = Kanone · ZOOM = Rakete' : `KAMPFJET!  ${kbK('forward')} Schub (Vollgas = Nachbrenner) · ab ~170 km/h ${kbK('jump')} = hochziehen · Linksklick Kanone · Rechtsklick Lenkrakete`); }
   else if (v.kind === 'plane') { ride.ctype = 'plane'; ride.thrl = 0; ride.pitch = 0; ride.planeV = 0; ride.bombs = PLANE_BOMBS; ride.bombReload = 0; ride.rkts = PLANE_RKTS; ride.rktReload = 0; ride.bombHeld = false; showMsg(TOUCH ? 'FLUGZEUG!  ▲ Gas · ▲ZIEHEN ab ~90 km/h = abheben · ◀ ▶ Kurven' : `FLUGZEUG!  ${kbK('forward')} Gas · ab ~90 km/h ${kbK('jump')} = hochziehen · ${kbK('crouch')} = Nase runter · ${kbK('left')}/${kbK('right')} Kurven`); }
   else if (v.kind === 'heli') { ride.heliAmmo = HELI_AMMO; ride.heliReload = 0; ride.pitch = 0; showMsg('HELIKOPTER!  Leertaste = steigen · C = sinken · W/S vor/zurück · A/D drehen · Linksklick = Raketen'); }
   else showMsg(TOUCH ? 'Moped – WHEELIE antippen!' : 'Aufgestiegen!  W Gas · S Bremse · A/D lenken · Leertaste Wheelie (antippen!) · E absteigen');
@@ -850,7 +850,7 @@ function exitRide(silent) {
 /* ---------- Fahrphysik (eigenes Moped) ---------- */
 function updateRide(dt) {
   if (ride.kind === 'heli') return heliRide(dt);
-  if (ride.kind === 'plane') return planeRide(dt);
+  if (ride.kind === 'plane') return ride.ctype === 'jet' ? jetRide(dt) : planeRide(dt);
   let thr =(keys.KeyW || keys.Gas ? 1 : 0) - (keys.KeyS ? 1 : 0), steer = (keys.KeyA ? 1 : 0) - (keys.KeyD ? 1 : 0);
   // Joystick/Lenkrad/Pedale ersetzen nur die Richtung, die sie gerade benutzen (Lenkrad lenkt, W/S gibt weiter Gas)
   if (touchIn.my) thr = -touchIn.my;
@@ -1138,13 +1138,17 @@ function jetHint() {
   const gun = `🔫 <b>${TOUCH ? 'FEUER' : 'Linksklick'}</b> Kanone ${gr > 0 ? `<span style="color:#ff9a3a">(lädt … ${gr.toFixed(1)} s)</span>` : `(${ride.gunAmmo})`}`;
   const msl = `🚀 <b>${TOUCH ? 'ZOOM' : 'Rechtsklick'}</b> Lenkrakete ${mr > 0 ? `<span style="color:#ff9a3a">(lädt … ${mr.toFixed(1)} s)</span>` : `(${ride.msl}/${JET_MSL})`}${ride.lock >= 0 ? ' <span style="color:#ff5a4a"><b>🎯 ZIEL ERFASST</b></span>' : ''}`;
   const ab = ride.thrl > 0.97 ? ' <span style="color:#ffb347">🔥 NACHBRENNER</span>' : '';
-  return `✈ <b>Kampfjet</b> · Schub ${Math.round((ride.thrl || 0) * 100)} %${ab} (<b>${kbK('forward')}/${kbK('back')}</b>) · <b>${kbK('jump')}</b> ziehen · <b>${kbK('crouch')}</b> drücken · <b>${kbK('left')}/${kbK('right')}</b> Rolle · ${gun} · ${msl} · <b>${kbK('ride')}</b> aussteigen${warn}`;
+  return `✈ <b>Kampfjet</b> · Schub ${Math.round((ride.thrl || 0) * 100)} %${ab} (<b>${kbK('forward')}/${kbK('back')}</b>) · <b>${kbK('jump')}</b> ziehen (halten = Looping) · <b>${kbK('crouch')}</b> drücken · <b>${kbK('left')}/${kbK('right')}</b> Rolle (kippen + ${kbK('jump')} = enge Kurve) · ${gun} · ${msl} · <b>${kbK('ride')}</b> aussteigen${warn}`;
 }
 // Zielrichtung = Fadenkreuz (Kamera), Startpunkt am Jet; fwd/right = Achsen des Jets
+// Achsen des Jets + Rumpfmitte c (Drehpunkt, 1,7 m über den Rädern)
+const JET_PIVOT = 1.7, _jetUp = new THREE.Vector3();
 function jetAxes() {
+  const c = new THREE.Vector3(ride.pos.x, ride.pos.y + JET_PIVOT, ride.pos.z);
+  if (ride.air && ride.q) return { c, fwd: new THREE.Vector3(1, 0, 0).applyQuaternion(ride.q), right: new THREE.Vector3(0, 0, 1).applyQuaternion(ride.q), up: new THREE.Vector3(0, 1, 0).applyQuaternion(ride.q) };
   const cp = Math.cos(ride.pitch || 0), fwd = new THREE.Vector3(Math.cos(ride.yaw) * cp, Math.sin(ride.pitch || 0), -Math.sin(ride.yaw) * cp);
   const right = new THREE.Vector3(Math.sin(ride.yaw), 0, Math.cos(ride.yaw));
-  return { fwd, right };
+  return { c, fwd, right, up: new THREE.Vector3(0, 1, 0) };
 }
 const _jo = new THREE.Vector3(), _jr = new THREE.Vector3(), _ju = new THREE.Vector3(), _jf = new THREE.Vector3();
 let lastVehHit = -1;   // von rocketVehicleHit gesetzt: welches Fahrzeug getroffen wurde
@@ -1170,8 +1174,8 @@ function jetCannon(now) {
     const n = ride.gunHits[lastVehHit] = (ride.gunHits[lastVehHit] || 0) + 1;
     if (n >= 8) { ride.gunHits[lastVehHit] = 0; const c = vehicles[lastVehHit].mesh.root.position; blast(new THREE.Vector3(c.x, c.y + 1.2, c.z), true, PLANE_W, 2.5, 40); }
   } else if (mh && what === 'map') impactFx(mh.point, mh.normal);
-  const { fwd, right } = jetAxes(), side = (ride.gunSide = -(ride.gunSide || 1));
-  const mz = ride.pos.clone().addScaledVector(fwd, 6.8).addScaledVector(right, 0.55 * side).add(new THREE.Vector3(0, 1.75, 0));
+  const { c, fwd, right, up } = jetAxes(), side = (ride.gunSide = -(ride.gunSide || 1));
+  const mz = c.addScaledVector(fwd, 6.8).addScaledVector(right, 0.55 * side).addScaledVector(up, 0.05);
   if ((ride.gunN = (ride.gunN || 0) + 1) % 2 === 0) addTracer(mz, end);
   const fl = new THREE.Sprite(flashMat.clone()); fl.position.copy(mz); fl.scale.set(1.1, 1.1, 1); fl.material.rotation = Math.random() * 6;
   scene.add(fl); effects.push({ o: fl, life: 0.05, max: 0.05 });
@@ -1205,8 +1209,8 @@ function jetMissiles(now) {
   const press = me.scoped && !ride.mslHeld; ride.mslHeld = me.scoped;
   if (!press || ride.mslReload || ride.msl <= 0 || now - (ride.mslShot || -9) < 0.45) return;
   ride.mslShot = now; ride.mslSide = -(ride.mslSide || 1);
-  const { fwd, right } = jetAxes();
-  const pod = ride.pos.clone().addScaledVector(right, 3.3 * ride.mslSide).addScaledVector(fwd, 0.3).add(new THREE.Vector3(0, 1.0, 0));
+  const { c, fwd, right, up } = jetAxes();
+  const pod = c.addScaledVector(right, 3.3 * ride.mslSide).addScaledVector(fwd, 0.3).addScaledVector(up, -0.7);
   const dir = _jf.clone();
   fireRocket(pod, dir.multiplyScalar(110 + Math.max(0, ride.vel.dot(dir))), true, PLANE_W, ride.v, ride.lock);
   sndShot(10, 0.5); me.shake = Math.max(me.shake, 0.15);
@@ -1216,6 +1220,129 @@ function jetWeapons(onG) {
   const now = performance.now() / 1000;
   if (onG && (ride.planeV || 0) < 3 && (ride.gunAmmo < JET_AMMO || ride.msl < JET_MSL)) { ride.gunAmmo = JET_AMMO; ride.gunReload = 0; ride.msl = JET_MSL; ride.mslReload = 0; }   // gelandet: neu beladen
   jetCannon(now); jetMissiles(now);
+}
+/* ---------- Kampfjet in der Luft: freie Drehung in alle Richtungen (Quaternion) → Loopings, Rollen, Rückenflug ----------
+   Leertaste = Nase hoch (ziehen), C = drücken, A/D = Rolle um die Längsachse. Die Bahn folgt immer der Nase:
+   in Schräglage ziehen = enge Kurve, dauerhaft ziehen = Looping, A/D halten = Rolle. Ohne Querruder richtet er sich
+   aus leichter Schräglage langsam waagerecht aus (nicht im Looping oder Rückenflug). Am Boden rollt er wie bisher. */
+const AX_X = new THREE.Vector3(1, 0, 0), AX_Y = new THREE.Vector3(0, 1, 0), AX_Z = new THREE.Vector3(0, 0, 1);
+const _jq = new THREE.Quaternion(), _jeu = new THREE.Euler(0, 0, 0, 'YXZ'), _jfw = new THREE.Vector3(), _jup = new THREE.Vector3(), _jri = new THREE.Vector3(), _jm4 = new THREE.Matrix4();
+function jetRide(dt) {
+  const K = JET_K, P = JET;
+  let thr = (keys.KeyW || keys.Gas ? 1 : 0) - (keys.KeyS ? 1 : 0), steer = (keys.KeyA ? 1 : 0) - (keys.KeyD ? 1 : 0);
+  if (touchIn.my) thr = -touchIn.my;
+  if (touchIn.mx) steer = -touchIn.mx;
+  const pull = (keys.Space ? 1 : 0) - (keys.KeyC || keys.ControlLeft ? 1 : 0);
+  ride.thrl = Math.max(0, Math.min(1, (ride.thrl || 0) + thr * (thr > 0 ? 0.55 : 0.8) * dt));
+  const ab = ride.thrl > 0.97, T = P.thrust * (ab ? 1.6 : 1), VM = P.vmax * (ab ? 1.35 : 1);
+  let v = ride.planeV || 0;
+  const gh = groundH(ride.pos.x, ride.pos.z, ride.pos.y);
+  if (!ride.q) { ride.q = new THREE.Quaternion(); ride.air = false; ride.pitchRate = 0; ride.rollRate = 0; }
+  const q = ride.q;
+  let crash = false, landed = false;
+  if (!ride.air) {
+    // --- am Boden: Bugrad lenkt, ab Abhebetempo mit Leertaste Nase hoch ---
+    v += (ride.thrl * T - v * v * (T / (VM * VM)) - 0.6) * dt;
+    if (thr < 0) v -= 14 * dt;
+    v = Math.max(0, v);
+    ride.yaw += steer * 0.7 * Math.min(1, v / 4) * Math.max(0.25, 1 - v / 70) * dt;
+    const want = pull > 0 && v > P.rot ? 0.16 : 0;
+    ride.pitch = (ride.pitch || 0) + (want - (ride.pitch || 0)) * Math.min(1, 4 * dt); ride.lean = 0;
+    const cp = Math.cos(ride.pitch);
+    ride.vel.set(Math.cos(ride.yaw) * v * cp, v > P.rot ? v * Math.sin(ride.pitch) : 0, -Math.sin(ride.yaw) * v * cp);
+    moveBody(ride, ride.vel.x * dt, ride.vel.y * dt, ride.vel.z * dt);
+    if (ride.blocked && v > 8) crash = true;
+    if (ride.pos.y - groundH(ride.pos.x, ride.pos.z, ride.pos.y) > 0.3) {   // abgehoben → freie Flugsteuerung
+      ride.air = true; q.setFromEuler(_jeu.set(ride.lean, ride.yaw, ride.pitch, 'YXZ')); ride.pitchRate = 0; ride.rollRate = 0;
+    }
+  } else {
+    // --- in der Luft ---
+    _jfw.copy(AX_X).applyQuaternion(q); _jup.copy(AX_Y).applyQuaternion(q); _jri.copy(AX_Z).applyQuaternion(q);
+    const auth = Math.max(0.2, Math.min(1, (v - 25) / 35));   // Ruder wirken erst mit Fahrt
+    const pr = pull > 0 ? 1.9 * pull * auth : 0.95 * pull * auth;            // Ziehen bis 1,9 rad/s → Kurvenradius ~55 m bei 400 km/h
+    const rr = -steer * 3.4 * Math.min(1, 0.4 + v / 80);                    // Rolle: volle Umdrehung in ~1,9 s
+    ride.pitchRate = (ride.pitchRate || 0) + (pr - (ride.pitchRate || 0)) * Math.min(1, 7 * dt);
+    ride.rollRate = (ride.rollRate || 0) + (rr - (ride.rollRate || 0)) * Math.min(1, 9 * dt);
+    q.multiply(_jq.setFromAxisAngle(AX_X, ride.rollRate * dt)).multiply(_jq.setFromAxisAngle(AX_Z, ride.pitchRate * dt));
+    const bank = Math.asin(Math.max(-1, Math.min(1, -_jri.y)));          // > 0 = rechte Fläche unten
+    if (_jup.y > -0.1 && Math.abs(_jfw.y) < 0.85)   // Schräglage allein lenkt schon in die Kurve (90° gekippt ≈ 22°/s bei 400 km/h)
+      q.premultiply(_jq.setFromAxisAngle(AX_Y, -Math.sin(bank) * 9.81 / Math.max(v, 30) * 4 * dt));
+    if (_jup.y > 0.25 && Math.abs(_jfw.y) < 0.8 && !steer && Math.abs(bank) < 1.1)   // ohne A/D langsam waagerecht (nicht im Looping/Rückenflug)
+      q.multiply(_jq.setFromAxisAngle(AX_X, -bank * 1.1 * dt));
+    const lift = Math.min(1.3, (v / P.stall) ** 2);
+    if (lift < 0.85) {   // Strömungsabriss: Nase fällt nach unten
+      _jm4.identity(); const ax = new THREE.Vector3().crossVectors(_jfw, new THREE.Vector3(0, -1, 0));
+      if (ax.lengthSq() > 1e-4) q.premultiply(_jq.setFromAxisAngle(ax.normalize(), (0.85 - lift) * 2.2 * dt));
+    }
+    q.normalize();
+    _jfw.copy(AX_X).applyQuaternion(q); _jup.copy(AX_Y).applyQuaternion(q);
+    // Tempo: Schub – Luftwiderstand – Steigung – Kurvenwiderstand (enges Ziehen kostet Fahrt)
+    const flaps = (0.35 - Math.min(0.35, ride.thrl)) * 0.04 * v;
+    v += (ride.thrl * T - v * v * (T / (VM * VM)) - flaps - 9.81 * _jfw.y - 0.035 * Math.abs(ride.pitchRate) * v) * dt;
+    v = Math.max(0, v);
+    ride.vel.copy(_jfw).multiplyScalar(v); ride.vel.y -= (1 - Math.min(1, lift)) * 9;
+    if (ride.pos.y > P.ceil && ride.vel.y > 0) ride.vel.y = 0;
+    const vyBefore = ride.vel.y;
+    moveBody(ride, ride.vel.x * dt, ride.vel.y * dt, ride.vel.z * dt);
+    if (ride.blocked && v > 8) crash = true;
+    // Kartenrand: automatisch wenden
+    const XMIN = -430, XMAX = 1090, ZM = 430;
+    if (ride.pos.x < XMIN || ride.pos.x > XMAX || Math.abs(ride.pos.z) > ZM) {
+      ride.pos.x = Math.max(XMIN, Math.min(XMAX, ride.pos.x)); ride.pos.z = Math.max(-ZM, Math.min(ZM, ride.pos.z));
+      q.premultiply(_jq.setFromAxisAngle(AX_Y, Math.PI * 0.9 * dt));
+      if (!ride.edgeMsg || performance.now() - ride.edgeMsg > 3000) { ride.edgeMsg = performance.now(); showMsg('Kartenrand – bitte umkehren'); }
+    }
+    // Boden berührt: Landung (Flächen waagerecht, Nase nicht nach unten, nicht zu hart) oder Bruch
+    if (ride.pos.y - groundH(ride.pos.x, ride.pos.z, ride.pos.y) < 0.05 && !crash) {
+      if (_jup.y > 0.9 && _jfw.y > -0.22 && vyBefore > -8) {
+        landed = true; ride.air = false;
+        ride.yaw = Math.atan2(-_jfw.z, _jfw.x); ride.pitch = 0; ride.lean = 0; v = Math.hypot(ride.vel.x, ride.vel.z);
+        sndThud(0.35); showMsg(v > 15 ? '✈ Gelandet – S zum Bremsen' : '✈ Gelandet');
+      } else crash = true;
+    }
+    if (ride.air) { _jeu.setFromQuaternion(q, 'YXZ'); ride.lean = _jeu.x; ride.yaw = _jeu.y; ride.pitch = _jeu.z; }
+  }
+  if (crash) {
+    sndThud(1); me.shake = Math.max(me.shake, 1);
+    for (let k = 0; k < 8; k++) puff(new THREE.Vector3(ride.pos.x + rnd(-2, 2), ride.pos.y + 1, ride.pos.z + rnd(-2, 2)), k % 2 ? 0x333333 : 0xff8a20, 0.8, 1.6, new THREE.Vector3(rnd(-2, 2), 2, rnd(-2, 2)), { opacity: 0.7, grow: 3 });
+    showMsg('💥 BRUCHLANDUNG! Der Jet ist wieder heil – flacher und langsamer aufsetzen');
+    v = 0; ride.thrl = 0; ride.pitch = 0; ride.lean = 0; ride.air = false; ride.pitchRate = 0; ride.rollRate = 0;
+    _jfw.copy(AX_X).applyQuaternion(q); ride.yaw = Math.atan2(-_jfw.z, _jfw.x);
+    ride.pos.y = groundH(ride.pos.x, ride.pos.z, ride.pos.y + 300);
+  }
+  if (ride.pos.y < -10) { ride.pos.set(950, 1, 300); ride.air = false; }
+  const nowOnG = !ride.air;
+  ride.planeV = v; ride.speed = v; ride.wh = 0; ride.dive = 0; ride.thr = thr; ride.onGround = nowOnG;
+  me.pos.set(ride.pos.x, ride.pos.y + K.up, ride.pos.z); me.vel.set(0, 0, 0); me.onGround = true;
+  const veh = vehicles[ride.v]; veh.x = ride.pos.x; veh.y = ride.pos.y; veh.z = ride.pos.z; veh.yaw = ride.yaw; veh.lean = ride.lean; veh.wh = ride.pitch; veh.st = ride.thrl;
+  // Kamera: folgt dem Jet in jeder Lage (auch kopfüber im Looping); Maus bewegt = kurz frei umschauen
+  if (!ride.air) q.setFromEuler(_jeu.set(ride.lean, ride.yaw, ride.pitch, 'YXZ'));
+  if (!ride.camQ) ride.camQ = q.clone();
+  ride.camQ.slerp(q, Math.min(1, dt * 5));
+  const free = performance.now() - ride.lastMouse < 900;
+  _jfw.copy(AX_X).applyQuaternion(ride.camQ); _jup.copy(AX_Y).applyQuaternion(ride.camQ);
+  const target = new THREE.Vector3(ride.pos.x, ride.pos.y + 1.7, ride.pos.z);
+  if (free) {
+    const back = new THREE.Vector3(Math.sin(me.yaw) * Math.cos(me.pitch), -Math.sin(me.pitch), Math.cos(me.yaw) * Math.cos(me.pitch));
+    let dist = K.camD; const hit = rayMap(target, back, dist + 0.3); if (hit) dist = Math.max(1.5, hit.dist - 0.3);
+    camera.position.copy(target).addScaledVector(back, dist);
+    camera.rotation.set(me.pitch, me.yaw, 0);
+  } else {
+    const off = _jfw.clone().multiplyScalar(-K.camD).addScaledVector(_jup, 3.2), dist = off.length(), dir = off.clone().divideScalar(dist);
+    const hit = rayMap(target, dir, dist + 0.3), d = hit ? Math.max(1.5, hit.dist - 0.3) : dist;
+    camera.position.copy(target).addScaledVector(dir, d);
+    // Blick knapp über den Jet nach vorne (Fadenkreuz = Schussrichtung), Horizont kippt mit dem Jet
+    const look = _jfw.clone().multiplyScalar(60).addScaledVector(_jup, 1.5).add(target).sub(camera.position).normalize();
+    const xA = new THREE.Vector3().crossVectors(_jup, look.clone().negate()).normalize(), yA = new THREE.Vector3().crossVectors(look.clone().negate(), xA);
+    _jm4.makeBasis(xA, yA, look.clone().negate()); camera.quaternion.setFromRotationMatrix(_jm4);
+    me.yaw = Math.atan2(-look.x, -look.z); me.pitch = Math.asin(Math.max(-1, Math.min(1, look.y)));   // freier Blick startet von hier
+  }
+  me.shake = Math.max(0, me.shake - dt * 1.6);
+  if (ab) me.shake = Math.max(me.shake, 0.04);
+  camera.fov += ((fovBase + Math.min(15, v * 0.11)) - camera.fov) * Math.min(1, dt * 6); camera.updateProjectionMatrix();
+  engineSound(true, v, ride.thrl + (ab ? 0.35 : 0), 'jet');
+  jetWeapons(nowOnG);
+  viewKnife.visible = false; viewNade.visible = false; viewGun.visible = false;
 }
 function planeRide(dt) {
   const jet = ride.ctype === 'jet', K = jet ? JET_K : VK.plane, P = jet ? JET : PLANE;
@@ -1625,6 +1752,10 @@ function updateVehicles(dt) {
     const landDip = v.i === ride.v ? -(ride.land || 0) * 0.07 : 0;
     m.root.position.set(x + Math.cos(yaw) * wf, y + wu + vib + landDip, z - Math.sin(yaw) * wf);
     m.root.rotation.set(parked && !isCar && !v.wreck ? 0.12 : lean, yaw, pitch + wh);
+    if (m.jet) {   // Jet dreht sich um den Rumpf (1,7 m über den Rädern), nicht um die Räder → saubere Loopings und Rollen
+      const u = _jetUp.set(0, 1, 0).applyQuaternion(m.root.quaternion);
+      m.root.position.x -= u.x * JET_PIVOT; m.root.position.y += JET_PIVOT - u.y * JET_PIVOT; m.root.position.z -= u.z * JET_PIVOT;
+    }
     // steht das Fahrzeug still (gleiche Lage wie im letzten Bild)? → Positionen der ~40 Einzelteile nicht neu berechnen
     const sig = m.root.position.x + m.root.position.y * 7 + m.root.position.z * 13 + yaw * 17 + lean * 19 + pitch * 23 + wh * 29 + st * 31 + v.spin * 37 + (v.rot || 0) * 41;
     m.root.userData.still = Math.abs(sig - (m.root.userData.sig === undefined ? NaN : m.root.userData.sig)) < 1e-7 ? (m.root.userData.still || 0) + 1 : 0;
