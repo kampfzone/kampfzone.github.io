@@ -6,16 +6,16 @@
 (function () {
   // Grafikstufe → [Radius in m, Abstand der Grasbüschel in m]; „Klar & schnell“ und „Sehr niedrig“: kein stehendes Gras
   // (gemessen auf einer Radeon R5 340X: „Mittel“ kostet so rund 1–2 ms pro Bild)
-  const LEVELS = { high: [36, 0.34], medium: [26, 0.4], perf: [18, 0.46], low: [13, 0.52] };
+  const LEVELS = { high: [28, 0.29, 10], medium: [21, 0.32, 9], perf: [15, 0.36, 7], low: [11, 0.42, 5] };   // + Radius der extra dichten Nahzone
   const TILE = 64, TP = 256, L_OCC = 7, L_GRASS = 6, H0 = -64, HR = 256, MAXN = 36000, MAXV = 6;
 
-  /* --- 1) Grasbüschel: 10 schmale, schräg stehende Halme (je 1 Dreieck = sparsam), dunkel unten, hell an der Spitze --- */
+  /* --- 1) Grasbüschel: 12 schmale, schräg stehende Halme (je 1 Dreieck = sparsam), dunkel unten, hell an der Spitze --- */
   const base = new THREE.BufferGeometry();
-  { const pos = [], col = [], hh = [], nb = 10;
+  { const pos = [], col = [], hh = [], nb = 12;
     const cB = [0.02, 0.038, 0.009], cT = [0.09, 0.165, 0.032];   // linearer Farbraum (passt zum Wiesen-Foto)
     for (let b = 0; b < nb; b++) {
-      const a = b / nb * Math.PI * 2 + Math.random() * 0.6, r = 0.02 + Math.random() * 0.17, x = Math.cos(a) * r, z = Math.sin(a) * r;
-      const fa = Math.random() * Math.PI, w = 0.02 + Math.random() * 0.016, h = 0.6 + Math.random() * 0.45;
+      const a = b / nb * Math.PI * 2 + Math.random() * 0.6, r = 0.02 + Math.random() * 0.2, x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const fa = Math.random() * Math.PI, w = 0.026 + Math.random() * 0.02, h = 0.6 + Math.random() * 0.45;
       const dx = Math.cos(fa) * w, dz = Math.sin(fa) * w, lean = 0.06 + Math.random() * 0.2, lx = Math.cos(a) * lean, lz = Math.sin(a) * lean;
       pos.push(x - dx, 0, z - dz, x + dx, 0, z + dz, x + lx, h, z + lz); hh.push(0, 0, h);
       col.push(...cB, ...cB, ...cT);
@@ -32,20 +32,21 @@
   offAttr.setUsage(THREE.DynamicDrawUsage); geo.setAttribute('aOff', offAttr); geo.instanceCount = 0;
 
   /* --- 2) Shader: Drehung/Größe je Büschel, Ausdünnen und Einsinken zum Rand, Wind, Ausweichen --- */
-  const U = { uTime: { value: 0 }, uR: { value: 28 }, uCam: { value: new THREE.Vector3() }, uPush: { value: new THREE.Vector3(0, 0, 0) }, uVeh: { value: Array.from({ length: MAXV }, () => new THREE.Vector4(0, 0, 0, 0)) } };
+  const U = { uTime: { value: 0 }, uR: { value: 28 }, uRn: { value: 9 }, uCam: { value: new THREE.Vector3() }, uPush: { value: new THREE.Vector3(0, 0, 0) }, uVeh: { value: Array.from({ length: MAXV }, () => new THREE.Vector4(0, 0, 0, 0)) } };
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   mat.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, U);
-    sh.vertexShader = `attribute vec4 aOff; attribute float aH; uniform float uTime, uR; uniform vec3 uPush, uCam; uniform vec4 uVeh[${MAXV}];
-float grDens(float f) { return f < 0.4 ? 1.0 : 1.0 - (f - 0.4) / 0.6 * 0.65; }
+    sh.vertexShader = `attribute vec4 aOff; attribute float aH; uniform float uTime, uR, uRn; uniform vec3 uPush, uCam; uniform vec4 uVeh[${MAXV}];
+float grDens(float f) { return f < 0.3 ? 1.0 : 1.0 - (f - 0.3) / 0.7 * 0.75; }
 ` + sh.vertexShader
       .replace('#include <begin_vertex>', `
-  vec3 wp = aOff.xyz; float sd = aOff.w;
+  vec3 wp = aOff.xyz; float sd = fract(aOff.w), near = step(1.0, aOff.w);   // aOff.w ≥ 1: zweite, nur nahe Lage
   float ang = fract(sd * 91.7) * 6.2831, cs = cos(ang), sn = sin(ang);
   vec3 transformed = vec3(cs * position.x - sn * position.z, position.y, sn * position.x + cs * position.z);
   float sc = 0.34 + fract(sd * 53.3) * 0.26;                       // Halmhöhe ~0,2 … 0,6 m
   float dc = distance(uCam, wp), fade = 1.0 - smoothstep(uR * 0.72, uR, dc);
   if (sd > grDens(dc / uR)) fade = 0.0;                             // weiter weg weniger Büschel
+  fade *= 1.0 - near * smoothstep(uRn * 0.55, uRn, dc);            // Nahzone läuft weich aus
   transformed *= vec3(sc * 1.4 * fade, sc * fade, sc * 1.4 * fade);
   float tip = aH * aH;
   float wv = sin(uTime * 1.5 + wp.x * 0.31 + wp.z * 0.19) * 0.55 + sin(uTime * 2.6 + wp.x * 0.87 - wp.z * 0.63) * 0.25 + 0.3;
@@ -59,7 +60,7 @@ float grDens(float f) { return f < 0.4 ? 1.0 : 1.0 - (f - 0.4) / 0.6 * 0.65; }
   }
   transformed += wp;`)
       .replace('#include <color_vertex>', `#include <color_vertex>
-  vColor.xyz *= (0.82 + fract(aOff.w * 17.9) * 0.36) * mix(vec3(1.0), vec3(1.35, 1.2, 0.7), step(0.86, fract(aOff.w * 31.7)));   // hellere/trockene Büschel`)
+  vColor.xyz *= (0.82 + fract(fract(aOff.w) * 17.9) * 0.36) * mix(vec3(1.0), vec3(1.35, 1.2, 0.7), step(0.86, fract(fract(aOff.w) * 31.7)));   // hellere/trockene Büschel`)
       .replace('#include <lights_lambert_vertex>', `#include <lights_lambert_vertex>
 #ifdef DOUBLE_SIDED
   vLightBack = vLightFront; vIndirectBack = vIndirectFront;   // Rückseiten genauso hell
@@ -123,9 +124,9 @@ float grDens(float f) { return f < 0.4 ? 1.0 : 1.0 - (f - 0.4) / 0.6 * 0.65; }
 
   /* --- 4) Büschel um den Spieler verteilen (festes Raster mit Zufallsversatz → nichts springt beim Neuaufbau) --- */
   const hash = (i, j) => { const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return s - Math.floor(s); };
-  const dens = f => f < 0.4 ? 1 : 1 - (f - 0.4) / 0.6 * 0.65;
+  const dens = f => f < 0.3 ? 1 : 1 - (f - 0.3) / 0.7 * 0.75;
   let bx = 1e9, bz = 1e9, bLevel = '', dirty = true;
-  function rebuild(cx, cz, R, sp) {
+  function rebuild(cx, cz, R, sp, Rn) {
     const M = 3, RR = (R + M) * (R + M); let n = 0;
     const i0 = Math.floor((cx - R - M) / sp), i1 = Math.ceil((cx + R + M) / sp), j0 = Math.floor((cz - R - M) / sp), j1 = Math.ceil((cz + R + M) / sp);
     for (let i = i0; i <= i1 && n < MAXN; i++) for (let j = j0; j <= j1; j++) {
@@ -134,6 +135,14 @@ float grDens(float f) { return f < 0.4 ? 1.0 : 1.0 - (f - 0.4) / 0.6 * 0.65; }
       if (s > dens(Math.max(0, Math.sqrt(d2) - M) / R)) continue;
       const h = groundAt(x, z); if (h !== h) continue;
       const k = n * 4; offArr[k] = x; offArr[k + 1] = h - 0.02; offArr[k + 2] = z; offArr[k + 3] = s;
+      if (++n >= MAXN) break;
+    }
+    // Nahzone: zweites, versetztes Raster → doppelt so dicht direkt um den Spieler
+    const RN = (Rn + M) * (Rn + M), a0 = Math.floor((cx - Rn - M) / sp), a1 = Math.ceil((cx + Rn + M) / sp), b0 = Math.floor((cz - Rn - M) / sp), b1 = Math.ceil((cz + Rn + M) / sp);
+    for (let i = a0; i <= a1 && n < MAXN; i++) for (let j = b0; j <= b1; j++) {
+      const x = (i + hash(i - 307, j + 131)) * sp, z = (j + hash(i + 211, j - 97)) * sp, dx = x - cx, dz = z - cz; if (dx * dx + dz * dz > RN) continue;
+      const h = groundAt(x, z); if (h !== h) continue;
+      const k = n * 4; offArr[k] = x; offArr[k + 1] = h - 0.02; offArr[k + 2] = z; offArr[k + 3] = 1 + hash(i + 59, j + 83) * 0.999;
       if (++n >= MAXN) break;
     }
     geo.instanceCount = n; offAttr.updateRange.offset = 0; offAttr.updateRange.count = n * 4; offAttr.needsUpdate = true;
@@ -167,7 +176,7 @@ float grDens(float f) { return f < 0.4 ? 1.0 : 1.0 - (f - 0.4) / 0.6 * 0.65; }
     if (!tagged) tagMap();
     const R = L[0], sp = L[1];
     if (bLevel !== gfx) { bLevel = gfx; dirty = true; }
-    U.uR.value = R; U.uTime.value += dt; U.uCam.value.copy(cp);   // (Lambert bekommt cameraPosition von three.js nicht)
+    U.uR.value = R; U.uRn.value = L[2]; U.uTime.value += dt; U.uCam.value.copy(cp);   // (Lambert bekommt cameraPosition von three.js nicht)
     // Kacheln rund um die Kamera (die nächste fehlende zuerst)
     let need = null, nd = 1e9;
     for (let tx = Math.floor((cp.x - R - 6) / TILE); tx <= Math.floor((cp.x + R + 6) / TILE); tx++)
@@ -176,7 +185,7 @@ float grDens(float f) { return f < 0.4 ? 1.0 : 1.0 - (f - 0.4) / 0.6 * 0.65; }
         const d = Math.hypot((tx + 0.5) * TILE - cp.x, (tz + 0.5) * TILE - cp.z); if (d < nd) { nd = d; need = [tx, tz]; }
       }
     if (need) { renderTile(need[0], need[1]); dirty = true; }
-    if (dirty || Math.hypot(cp.x - bx, cp.z - bz) > 3) { rebuild(cp.x, cp.z, R, sp); dirty = false; }
+    if (dirty || Math.hypot(cp.x - bx, cp.z - bz) > 3) { rebuild(cp.x, cp.z, R, sp, L[2]); dirty = false; }
     mesh.visible = geo.instanceCount > 0;
     // Spieler zu Fuß drückt die Halme zur Seite; Fahrzeuge in der Nähe drücken sie platt
     const onFoot = !(typeof ride !== 'undefined' && ride.v >= 0);
