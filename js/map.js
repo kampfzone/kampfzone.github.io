@@ -225,16 +225,69 @@ function tree(x, z, s = 1, solid = true) {
   scene.add(g);
   if (solid) treeCollider(x, 0, z, 0.5 * s, 3 * s, 0.5 * s);
 }
-// Laubbaum (rundere Krone) für den Park
-const leafMat2 = new THREE.MeshStandardMaterial({ map: TEX.needles, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.95, color: new THREE.Color(0.9, 1.0, 0.7) });
-function leafTree(x, z, s = 1) {
-  const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s);
-  const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.28, 4, 12), treeTrunkMat); tr.position.y = 2; tr.castShadow = true; g.add(tr);
-  const lowT = MAP_ID === 'welt';   // große Karte: einfachere Baumkronen
-  for (let i = 0; i < (lowT ? 4 : 6); i++) {
-    const c = new THREE.Mesh(new THREE.SphereGeometry(srnd(1.2, 1.8), lowT ? 8 : 11, lowT ? 6 : 8), leafMat2);
-    c.position.set(srnd(-1, 1), srnd(3.8, 5.4), srnd(-1, 1)); c.castShadow = true; g.add(c);
+/* ---------- Echtes Laub: Kronen aus vielen Blätter-Büscheln (Bild mit einzelnen Blättern, dazwischen durchsichtig) ----------
+   Jede Krone besteht aus mehreren Blattwolken, jede Wolke aus ~10 schräg stehenden Blätter-Karten. Die Lichtrichtung
+   jeder Karte zeigt von der Kronenmitte nach außen → die Krone wirkt rund und weich beleuchtet, innen dunkler. */
+const LEAF_TEX = canvasTex((g, s) => {
+  g.clearRect(0, 0, s, s);
+  const twig = '#4a3826';
+  for (let i = 0; i < 14; i++) {   // Zweige
+    const a = Math.random() * 6.28, r = s * (0.2 + Math.random() * 0.25);
+    g.strokeStyle = twig; g.lineWidth = 1.5 + Math.random() * 2; g.beginPath(); g.moveTo(s / 2, s / 2); g.lineTo(s / 2 + Math.cos(a) * r, s / 2 + Math.sin(a) * r); g.stroke();
   }
+  for (let pass = 0; pass < 2; pass++) for (let i = 0; i < 330; i++) {   // erst dunkle (innen), dann helle Blätter (außen)
+    const a = Math.random() * 6.28, d = Math.sqrt(Math.random()) * s * (pass ? 0.46 : 0.36), x = s / 2 + Math.cos(a) * d, y = s / 2 + Math.sin(a) * d;
+    const l = pass ? 0.85 + Math.random() * 0.45 : 0.45 + Math.random() * 0.35, hue = Math.random();
+    g.fillStyle = `rgb(${(48 + hue * 30) * l | 0},${(92 + hue * 30) * l | 0},${(34 + hue * 10) * l | 0})`;
+    g.save(); g.translate(x, y); g.rotate(Math.random() * 6.28); g.beginPath(); g.ellipse(0, 0, 4 + Math.random() * 5, 2.2 + Math.random() * 2.4, 0, 0, 7); g.fill();
+    g.fillStyle = 'rgba(255,255,230,.18)'; g.beginPath(); g.ellipse(-1, -0.8, 2.2, 1, 0, 0, 7); g.fill(); g.restore();   // Glanzlicht
+  }
+}, 256, false);
+// Blattwolken-Geometrie: blobs = [[Radius, x, y, z, Höhenstreckung], …], n Karten pro Wolke
+function leafCardGeo(blobs, n = 10, rnd = srand) {
+  const pos = [], nor = [], uv = [], idx = [];
+  const q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), c = new THREE.Vector3();
+  for (const [r, bx, by, bz, sy = 1] of blobs) for (let k = 0; k < n; k++) {
+    const a = rnd() * 6.28, b = Math.acos(rnd() * 2 - 1), d = Math.sqrt(rnd()) * r * 0.62;
+    c.set(bx + Math.sin(b) * Math.cos(a) * d, by + Math.cos(b) * d * sy, bz + Math.sin(b) * Math.sin(a) * d);
+    e.set(rnd() * 6.28, rnd() * 6.28, rnd() * 6.28); q.setFromEuler(e);
+    const h = r * (0.75 + rnd() * 0.35), base = pos.length / 3;
+    for (const [px, py, u, w] of [[-h, -h, 0, 0], [h, -h, 1, 0], [h, h, 1, 1], [-h, h, 0, 1]]) {
+      v.set(px, py, 0).applyQuaternion(q).add(c); pos.push(v.x, v.y, v.z); uv.push(u, w);
+      const nx = v.x - bx, ny = (v.y - by) / sy + r * 0.35, nz = v.z - bz, l = Math.hypot(nx, ny, nz) || 1;   // nach außen (leicht nach oben)
+      nor.push(nx / l, ny / l, nz / l);
+    }
+    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); return withUv2(g);
+}
+// Laub-Material: beidseitig gleich hell (Rückseiten nicht schwarz), leichtes Durchscheinen
+function leafMat(color) {
+  const m = new THREE.MeshLambertMaterial({ map: LEAF_TEX, alphaTest: 0.5, side: THREE.DoubleSide, color, emissive: new THREE.Color(0.035, 0.05, 0.015) });
+  m.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <lights_lambert_vertex>', '#include <lights_lambert_vertex>\n#ifdef DOUBLE_SIDED\nvLightBack = vLightFront; vIndirectBack = vIndirectFront;\n#endif'); };
+  return m;
+}
+// Laubbaum (rundere Krone) für Park und Straßen
+const leafMat2 = leafMat(new THREE.Color(0.95, 1.0, 0.8));
+const LEAF_CROWNS = [0, 1, 2, 3].map(k => {   // vier Kronen-Formen, von allen Bäumen geteilt
+  let s = 917 + k * 131; const r = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  const blobs = []; for (let i = 0; i < 5; i++) blobs.push([1.25 + r() * 0.6, (r() - 0.5) * 2, 3.9 + r() * 1.6, (r() - 0.5) * 2, 0.85]);
+  return leafCardGeo(blobs, 11, r);
+});
+const LEAF_TRUNK = (() => {   // Stamm + drei Äste als ein Stück (weniger Zeichenaufrufe)
+  const parts = [new THREE.CylinderGeometry(0.16, 0.28, 4, 10).translate(0, 2, 0)], o = new THREE.Object3D();
+  for (let i = 0; i < 3; i++) {
+    o.position.set(0, 3.6, 0); o.rotation.set(0.7, i * 2.1, 0, 'YXZ'); o.updateMatrix(); o.translateY(0.6); o.updateMatrix();
+    parts.push(new THREE.CylinderGeometry(0.05, 0.1, 1.6, 6).applyMatrix4(o.matrix));
+  }
+  return THREE.BufferGeometryUtils.mergeBufferGeometries(parts);
+})();
+function leafTree(x, z, s = 1) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s); g.rotation.y = srand() * 6;
+  const tr = new THREE.Mesh(LEAF_TRUNK, treeTrunkMat); tr.castShadow = true; g.add(tr);
+  const c = new THREE.Mesh(LEAF_CROWNS[Math.floor(srand() * LEAF_CROWNS.length)], leafMat2); c.castShadow = true; c.receiveShadow = true; g.add(c);
   scene.add(g);
   treeCollider(x, 0, z, 0.55 * s, 3.5 * s, 0.55 * s);
 }
@@ -1933,13 +1986,11 @@ function forestExtras(LX, LZ, LR) {
     for (let i = 0; i < 26; i++) g.fillRect(Math.random() * 54, Math.random() * 256, 4 + Math.random() * 14, 2 + Math.random() * 4);
     const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t; })() });
   barkB.userData.trunk = true;   // Birkenstämme: in „Klar & schnell“ ausblenden
-  // Kronen: mehrere massive Blätter-Kugeln (Blätter-Textur als Relief, keine Löcher)
-  const leafy = c => new THREE.MeshStandardMaterial({ map: TEX.needles, bumpMap: TEX.needles, bumpScale: 0.06, roughness: 1, color: c, flatShading: true });
-  const crownMat = leafy(new THREE.Color(0.36, 0.55, 0.24)), crownMat2 = leafy(new THREE.Color(0.5, 0.68, 0.28));
+  // Kronen: Blattwolken aus Blätter-Karten (echtes Laub mit Lücken, weich beleuchtet)
+  const crownMat = leafMat(new THREE.Color(0.75, 0.9, 0.62)), crownMat2 = leafMat(new THREE.Color(0.95, 1.05, 0.66));
   const trunkG = new THREE.CylinderGeometry(0.18, 0.3, 5, 8); trunkG.translate(0, 2.5, 0);
-  const blob = (r, x, y, z, sy = 1) => { const g = new THREE.IcosahedronGeometry(r, 1); g.scale(1, sy, 1); g.translate(x, y, z); return g; };
-  const crownG = THREE.BufferGeometryUtils.mergeBufferGeometries([blob(2.0, 0, 5.6, 0, 0.85), blob(1.5, 1.1, 6.6, 0.4, 0.85), blob(1.4, -0.9, 6.3, -0.7, 0.85)]);
-  const crownG2 = THREE.BufferGeometryUtils.mergeBufferGeometries([blob(1.2, 0, 5.6, 0, 1.3), blob(0.95, 0.5, 7.0, 0.3, 1.3), blob(0.9, -0.4, 6.6, -0.4, 1.2)]);
+  const crownG = leafCardGeo([[2.0, 0, 5.6, 0, 0.85], [1.5, 1.1, 6.6, 0.4, 0.85], [1.4, -0.9, 6.3, -0.7, 0.85], [1.3, 0.2, 7.2, -0.3, 0.8]], 10);
+  const crownG2 = leafCardGeo([[1.2, 0, 5.6, 0, 1.3], [0.95, 0.5, 7.0, 0.3, 1.3], [0.9, -0.4, 6.6, -0.4, 1.2]], 10);
   const kinds = [{ n: 160, trunk: treeTrunkMat, crown: crownG, cm: crownMat }, { n: 100, trunk: barkB, crown: crownG2, cm: crownMat2 }];
   for (const K of kinds) {
     const T = new THREE.InstancedMesh(trunkG, K.trunk, K.n), C = new THREE.InstancedMesh(K.crown, K.cm, K.n);
@@ -1953,7 +2004,7 @@ function forestExtras(LX, LZ, LR) {
     T.count = C.count = n; T.castShadow = C.castShadow = true; C.receiveShadow = true; scene.add(T); scene.add(C);
   }
   // Büsche (Unterholz, man kann hindurchlaufen)
-  { const N = 420, B = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ map: TEX.needles, color: new THREE.Color(0.42, 0.6, 0.3), roughness: 1, bumpMap: TEX.needles, bumpScale: 0.05 }), N);
+  { const N = 420, B = new THREE.InstancedMesh(leafCardGeo([[1, 0, 0.1, 0, 0.8], [0.7, 0.5, 0.2, 0.3, 0.8]], 8), leafMat(new THREE.Color(0.7, 0.85, 0.55)), N);
     let n = 0, tries = 0;
     while (n < N && tries++ < 6000) { const x = srnd(-289, -17), z = srnd(-289, -17); if (!free(x, z)) continue;
       const s = srnd(0.6, 1.4); place(B, n++, x, hillH(x, z) + s * 0.25, z, s * srnd(1, 1.6), s * srnd(0.55, 0.8), s * srnd(1, 1.6), srand() * 6); }
@@ -3217,7 +3268,7 @@ function foliageList() {
     if (!m) return false; const o = (m.userData && m.userData.orig) || m;
     if (o === HEDGE_MAT || o === LOG_MAT) return false;
     return o === leafMat2 || o === treeLeafMat || o === treeTrunkMat || o.userData.trunk || o === TKM.sakura || o === FURN.glass
-      || o.map === TEX.needles || o.map === TEX.blades || o.map === TEX.bark;
+      || o.map === TEX.needles || o.map === TEX.blades || o.map === TEX.bark || o.map === LEAF_TEX;
   };
   scene.traverse(o => {
     if (!o.isMesh || !o.material || Array.isArray(o.material)) return;

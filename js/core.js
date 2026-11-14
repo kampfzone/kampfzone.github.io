@@ -5,8 +5,8 @@ const PREFIX = 'kampfzone-arena-v1-';
 const TOUCH = matchMedia('(pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && matchMedia('(hover: none)').matches);
 if (TOUCH) document.body.classList.add('touch');
 
-/* Update-Prüfung: beim Veröffentlichen wird 20261113-200918 durch eine Versionsnummer ersetzt */
-const BUILD = '20261113-200918';
+/* Update-Prüfung: beim Veröffentlichen wird 20261114-090227 durch eine Versionsnummer ersetzt */
+const BUILD = '20261114-090227';
 // Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
 // Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
 const UPD = { newer: null };
@@ -482,9 +482,10 @@ loadMgr.onLoad = () => { const el = $('loadInfo'); if (el) el.textContent = 'Gra
 
 /* ---------- Licht ---------- */
 const SUN_DIR = new THREE.Vector3(0.45, 0.7, 0.55).normalize();
-const hemi = new THREE.HemisphereLight(0xd6e6ff, 0x5a5040, 0.35);
+// warmes, kräftiges Sonnenlicht + etwas weniger Himmelslicht → mehr Kontrast und Tiefe (Schatten zeichnen Formen)
+const hemi = new THREE.HemisphereLight(0xcfe0ff, 0x4a4234, 0.3);
 scene.add(hemi);
-const sun = new THREE.DirectionalLight(0xfff1dc, 2.6);
+const sun = new THREE.DirectionalLight(0xffe6c2, 2.9);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.bias = -0.0004;
@@ -773,8 +774,25 @@ function roundedBoxGeo(w, h, d, r, m = 2, tile = 0) {
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) pos.setY(i, heightAt(pos.getX(i), pos.getZ(i)));
   geo.computeVertexNormals(); withUv2(geo);
+  // Natürliche Farbverläufe: sattes Grün, trockene/helle Flecken, dunklere Mulden, Fels an steilen Hängen und weit oben
+  { const nor = geo.attributes.normal, col = new Float32Array(pos.count * 3);
+    const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+    // echte Bodenfarben (linear); das Gras-Foto liefert nur noch die feine Struktur (siehe Material unten)
+    const GREEN = welt ? [0.034, 0.062, 0.017] : [0.045, 0.075, 0.026], LUSH = [0.02, 0.043, 0.013], DRY = [0.075, 0.064, 0.03], ROCK = [0.062, 0.058, 0.05];
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i), y = pos.getY(i), slope = 1 - nor.getY(i);
+      const n1 = fbm(x * 0.012 + 11, z * 0.012 - 4), n2 = fbm(x * 0.05 - 3, z * 0.05 + 9);
+      let c = lerp3(LUSH, GREEN, Math.min(1, Math.max(0, n1 * 1.6 - 0.2)));           // Grün mit großen hellen/dunklen Bereichen
+      c = lerp3(c, DRY, sstep(0.55, 0.8, n2) * 0.55);                                   // trockene Grasflecken
+      c = lerp3(c, ROCK, Math.min(0.85, sstep(0.16, 0.4, slope) + sstep(45, 75, y) * 0.35)); // Fels/Erde an Steilhängen und oben
+      const k = 0.88 + n2 * 0.22; col[i * 3] = c[0] * k; col[i * 3 + 1] = c[1] * k; col[i * 3 + 2] = c[2] * k;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); }
   // Einfacheres Material für die weite Landschaft (schneller)
-  const terrain = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: ptex('grass_diff.jpg', true, 250, 250), color: welt ? new THREE.Color(0.42, 0.68, 0.32) : new THREE.Color(0.62, 0.85, 0.45) }));
+  const terrain = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: ptex('grass_diff.jpg', true, 250, 250), vertexColors: true }));
+  // Foto (bräunlich) → fast farblose Struktur mit Mittelwert 1; die Farbe kommt aus den Eckpunkt-Farben
+  terrain.material.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>',
+    'vec4 texelColor = mapTexelToLinear(texture2D(map, vUv)); float tl = dot(texelColor.rgb, vec3(0.3, 0.59, 0.11));\n diffuseColor.rgb *= mix(vec3(tl), texelColor.rgb, 0.3) * vec3(16.9, 20.2, 26.3);'); };
   terrain.material.userData.grassGround = true;
   scene.add(terrain);
   window.terrainHeight = heightAt;

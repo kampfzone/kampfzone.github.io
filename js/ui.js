@@ -323,7 +323,7 @@ function frame(t) {
   if (gfx === 'perf' || gfx === 'clean') { SHADOW.t -= dt; if (sunMoved || SHADOW.t <= 0) { renderer.shadowMap.needsUpdate = true; SHADOW.t = 0.1; } }
   if (window.waterNormal) { window.waterNormal.offset.x += dt * 0.004; window.waterNormal.offset.y += dt * 0.0025; }
   skyMesh.position.copy(camera.position);
-  renderer.render(scene, camera);
+  if (window.postRender) postRender(); else renderer.render(scene, camera);   // Kino-Look (postfx.js)
   if (window.recFrame) recFrame();   // Videoaufnahme (record.js)
   fpsTick(t);
 }
