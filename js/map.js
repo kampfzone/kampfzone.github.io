@@ -2823,6 +2823,127 @@ function weltMilitaer(road) {
     [1468, -130, 1536, 130], ...[RZ0 + 30, 0, RZ1 - 30].map(z => [TX, z - 9, RX - RW / 2, z + 9]), ...[-285, -225, -165, 165, 225, 285].map(z => [1424, z - 11, TX - 9, z + 11]));
   (window.MAP_POIS = window.MAP_POIS || []).push({ x: 1228, z: -34, t: '⭐' }, { x: RX, z: RZ1 - 40, t: '🛩' }, { x: 1385, z: 80, t: '🚁' });
 }
+/* ======================= Felder auf den freien Wiesen der Karte „Welt“ =======================
+   Die Flächen wurden einmal automatisch vermessen (Wiese ohne Gebäude, Straßen, Plätze, Bäume, Parks, Strecken, Schanzen,
+   Waffen und Fahrzeuge, mit 4 m Abstand) und sind hier fest eingetragen: [x, z, Breite, Tiefe].
+   Weizen, Mais und Raps stehen als Bestand in echter Höhe (oben Ähren/Blätter/Blüten, am Rand Halme mit unregelmäßiger
+   Oberkante) – man läuft und fährt hindurch. Dazu frisch gepflügte Äcker, junge Saat in Reihen, gemähte Wiesen mit Heu- und
+   Silageballen und zwei Traktoren. Neben der Start-/Landebahn des Militärflugplatzes nur niedrige Wiesen (freie Sicht). */
+const WELT_FIELDS = [[1268, -164, 152, 112], [488, 100, 108, 128], [1328, -336, 92, 120], [1184, -332, 68, 160], [1360, 112, 60, 160], [1184, -168, 68, 124], [1184, 220, 68, 112],
+  [292, -300, 44, 160], [488, 12, 144, 48], [1632, -312, 40, 160], [1268, 12, 160, 40], [1632, 8, 40, 160], [292, 12, 44, 136], [716, 12, 160, 36], [300, 152, 36, 156], [1632, -148, 40, 140],
+  [292, -136, 44, 124], [1424, -144, 40, 132], [488, 232, 40, 132], [156, 16, 132, 36], [1632, 208, 40, 100], [1268, 156, 88, 44], [1268, -260, 40, 92], [908, 12, 68, 52], [1396, 56, 68, 52],
+  [924, -52, 80, 40], [-336, 196, 80, 40], [-312, 48, 56, 56], [1488, -336, 96, 32], [-236, 256, 48, 64], [1488, 304, 96, 32], [-104, 256, 56, 52], [-316, -328, 88, 32], [1344, -48, 76, 36],
+  [-300, 116, 44, 56], [-172, 256, 56, 44], [1456, -272, 76, 32], [1456, -212, 76, 32], [488, -236, 32, 76], [1456, 180, 76, 32], [1456, 240, 76, 32], [1380, 276, 40, 60], [900, -284, 36, 64],
+  [592, -172, 56, 40], [488, 64, 68, 32], [1184, 160, 68, 32], [904, 328, 60, 36], [-300, 256, 44, 48], [-188, -336, 52, 40], [836, -304, 56, 32], [-336, 280, 32, 56], [552, -264, 40, 40],
+  [-336, -196, 40, 40], [916, -136, 40, 40], [612, -120, 44, 32], [76, 16, 44, 32], [604, 68, 32, 44], [944, 68, 32, 44], [1432, -336, 40, 32], [1424, 112, 40, 32], [1432, 304, 40, 32],
+  [736, -224, 36, 32], [1412, -212, 36, 32], [488, -76, 32, 32], [980, 56, 32, 32]];
+function weltFields() {
+  const r = (a, b) => a + Math.random() * (b - a), pick = a => a[Math.floor(Math.random() * a.length)];
+  // Halme/Blätter als kurze Striche
+  const strokes = (g, s, n, cols, l0, l1, w, a0, a1) => { g.lineCap = 'round';
+    for (let i = 0; i < n; i++) { const x = Math.random() * s, y = Math.random() * s, a = r(a0, a1), l = r(l0, l1); g.strokeStyle = pick(cols); g.lineWidth = w;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); } };
+  // große, weiche Farbflecken (Reife, Wind, Bodenunterschiede) – nahtlos kachelbar
+  const macro = (g, s, cols) => { for (let i = 0; i < 26; i++) { const x = Math.random() * s, y = Math.random() * s, rr = r(20, 70), c = pick(cols);
+    for (const dx of [-s, 0, s]) for (const dy of [-s, 0, s]) { const gr = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, rr); gr.addColorStop(0, c); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x + dx - rr, y + dy - rr, 2 * rr, 2 * rr); } } };
+  const tram = (g, s, col) => { g.fillStyle = col; for (const y of [s * 0.42, s * 0.58]) g.fillRect(0, y - 2, s, 4); };   // Fahrgasse (Traktorspur, entlang der Reihen)
+  const top = (draw, tile) => { const m = new THREE.MeshStandardMaterial({ map: canvasTex(draw, 256), roughness: 0.95 }); m.userData.tile = tile; return m; };
+  // Rand-Bild: Halme von unten bis zu einer unregelmäßigen Oberkante, darüber durchsichtig
+  const side = (stalk, head, dark, topMin, topMax, headR, w = 1.6) => new THREE.MeshStandardMaterial({ map: canvasTex((g, s) => {
+    g.clearRect(0, 0, s, s);
+    for (let x = 0; x < s; x += w * 0.9) {
+      const yt = r(topMin, topMax) * s, gr = g.createLinearGradient(0, yt, 0, s); gr.addColorStop(0, pick(stalk)); gr.addColorStop(1, dark);
+      g.strokeStyle = gr; g.lineWidth = w; g.beginPath(); g.moveTo(x + r(-2, 2), s); g.lineTo(x + r(-3, 3), yt); g.stroke();
+      if (headR) { g.fillStyle = pick(head); g.beginPath(); g.ellipse(x, yt + headR, headR * 0.45, headR, r(-0.3, 0.3), 0, 7); g.fill(); }
+    }
+  }, 256), alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.95 });
+  const M = {
+    wheat: top((g, s) => { g.fillStyle = '#a07e32'; g.fillRect(0, 0, s, s); macro(g, s, ['rgba(120,90,30,.35)', 'rgba(210,180,100,.25)', 'rgba(90,80,30,.3)']);
+      strokes(g, s, 9000, ['#d9b75a', '#b8923c', '#e2c46c', '#8a6a26', '#c9a64c'], 2, 5, 1.1, -2.0, -1.1); tram(g, s, 'rgba(60,45,20,.55)'); }, 9),
+    wheatS: side(['#c9a24a', '#b8913c', '#d6b45c'], ['#e3c46a', '#d1ad55'], '#6b5a2a', 0.12, 0.3, 5),
+    corn: top((g, s) => { g.fillStyle = '#1f3a16'; g.fillRect(0, 0, s, s); strokes(g, s, 1800, ['#3f6a24', '#2f5420', '#4f7d2c', '#5a8a34', '#1c3412'], 12, 30, 3.5, 0, 6.28); strokes(g, s, 250, ['#b8a95a', '#a8984c'], 3, 6, 1.6, -2, -1.1); }, 5),
+    cornS: new THREE.MeshStandardMaterial({ map: canvasTex((g, s) => {
+      g.clearRect(0, 0, s, s);
+      for (let x = 4; x < s; x += r(8, 13)) {
+        const yt = r(0.06, 0.2) * s; g.strokeStyle = '#4a6a22'; g.lineWidth = 3.2; g.beginPath(); g.moveTo(x, s); g.lineTo(x + r(-2, 2), yt); g.stroke();
+        g.strokeStyle = '#d8c070'; g.lineWidth = 1.5; for (let k = -1; k <= 1; k++) { g.beginPath(); g.moveTo(x, yt); g.lineTo(x + k * 5, yt - 12); g.stroke(); }   // Rispe
+        for (let y = yt + 14; y < s - 8; y += r(14, 24)) { const sd = Math.random() < 0.5 ? -1 : 1; g.strokeStyle = pick(['#3f6a24', '#2f5a1c', '#4f7d2c']); g.lineWidth = 4;
+          g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + sd * 12, y - 8, x + sd * r(18, 26), y + r(4, 12)); g.stroke(); }   // Blätter
+        if (Math.random() < 0.5) { g.fillStyle = '#c9c07a'; g.beginPath(); g.ellipse(x + 3, s * 0.55, 2.5, 9, 0.3, 0, 7); g.fill(); }   // Kolben
+      }
+    }, 256), alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.95 }),
+    rape: top((g, s) => { g.fillStyle = '#4c7a2a'; g.fillRect(0, 0, s, s); for (let i = 0; i < 16000; i++) { g.fillStyle = pick(['#f2d22a', '#e8c41a', '#fff070', '#d9b814', '#c9a812']); g.beginPath(); g.arc(Math.random() * s, Math.random() * s, r(0.8, 1.8), 0, 7); g.fill(); }
+      macro(g, s, ['rgba(60,100,30,.35)', 'rgba(255,230,80,.18)', 'rgba(40,70,20,.3)']); tram(g, s, 'rgba(40,70,25,.7)'); }, 9),
+    rapeS: side(['#5d8a32', '#4c7a2a', '#6a9a3a'], ['#f2d22a', '#ffe14a', '#e8c41a'], '#2f4a1c', 0.04, 0.2, 4, 1.4),
+    plow: top((g, s) => { g.fillStyle = '#5e4229'; g.fillRect(0, 0, s, s);
+      for (let y = 0; y < s; y += 12) { g.fillStyle = 'rgba(30,20,12,.45)'; g.fillRect(0, y, s, 4); g.fillStyle = 'rgba(150,115,80,.28)'; g.fillRect(0, y + 6, s, 3); }
+      for (let i = 0; i < 2500; i++) { g.fillStyle = pick(['rgba(40,28,16,.5)', 'rgba(120,90,60,.4)', 'rgba(90,64,40,.5)']); g.fillRect(Math.random() * s, Math.random() * s, r(1, 3.5), r(1, 2.5)); } }, 6),
+    rows: top((g, s) => { g.fillStyle = '#6a4c31'; g.fillRect(0, 0, s, s); speckle(g, s, 2500, '30,20,10', 0.3, 2);
+      for (let y = 8; y < s; y += 16) for (let x = 0; x < s; x += 4) { g.fillStyle = pick(['#5f9a34', '#4d8a2c', '#78b048', '#3f7a26']);   // junge Pflänzchen in Reihen
+        for (let k = 0; k < 3; k++) { g.beginPath(); g.ellipse(x + r(-1.5, 1.5), y + r(-1.5, 1.5), r(1.2, 2.4), r(0.6, 1.2), r(0, 3.14), 0, 7); g.fill(); } } }, 8),
+    hay: top((g, s) => { g.fillStyle = '#86a04a'; g.fillRect(0, 0, s, s); g.fillStyle = 'rgba(255,240,170,.12)'; g.fillRect(0, 0, s, s / 2);
+      strokes(g, s, 5000, ['#9ab454', '#7a9440', '#a8bc60', '#6e8a3a'], 2, 5, 1.2, 0, 6.28);
+      for (const y of [s * 0.25, s * 0.75]) for (let i = 0; i < 900; i++) {   // Schwaden (zusammengerechtes Heu)
+        const x0 = Math.random() * s, y0 = y + r(-7, 7), a = r(-0.4, 0.4), l = r(3, 7); g.strokeStyle = pick(['#cdb86a', '#bca85a', '#d9c67c']); g.lineWidth = 1.4;
+        g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 + Math.cos(a) * l, y0 + Math.sin(a) * l); g.stroke(); }
+    }, 16),
+    soil: new THREE.MeshStandardMaterial({ color: 0x3b2c1e, roughness: 1 }),
+    bale: new THREE.MeshStandardMaterial({ roughness: 0.9, map: canvasTex((g, s) => { g.fillStyle = '#c4ad62'; g.fillRect(0, 0, s, s); strokes(g, s, 2500, ['#d9c47a', '#a8924c', '#e2d08a'], 4, 10, 1.4, -0.3, 0.3); }, 128) }),
+    wrap: new THREE.MeshStandardMaterial({ color: 0xeeeeea, roughness: 0.35, metalness: 0.05 }),
+    trGreen: new THREE.MeshStandardMaterial({ color: 0x2f7a32, roughness: 0.45, metalness: 0.3 }),
+  };
+  M.bale.map.wrapS = THREE.RepeatWrapping; M.corn.side = THREE.DoubleSide;
+  M.wheat.color.setRGB(0.56, 0.54, 0.5); M.wheatS.color.setRGB(0.8, 0.78, 0.72); M.rape.color.setRGB(0.82, 0.82, 0.8);   // in der Sonne nicht weiß überstrahlen
+  // senkrechter Rand (Halme) zwischen zwei Punkten, Höhe h; Bild wiederholt sich alle 4 m
+  const edge = (x0, z0, x1, z1, h, mat) => {
+    const L = Math.hypot(x1 - x0, z1 - z0), g = new THREE.PlaneGeometry(L, h), uv = g.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * L / 4);
+    const m = new THREE.Mesh(withUv2(g), mat); m.position.set((x0 + x1) / 2, h / 2, (z0 + z1) / 2); m.rotation.y = -Math.atan2(z1 - z0, x1 - x0); scene.add(m);
+  };
+  // Fläche mit Reihen entlang der langen Seite
+  const flat = (x, z, w, d, mat, y) => { const ax = w >= d; decalT(x + w / 2, z + d / 2, ax ? w : d, ax ? d : w, mat, mat.userData.tile, ax ? 0 : Math.PI / 2, y); };
+  const stand = (x, z, w, d, H, topM, sideM) => {   // Bestand: Erde, Oberfläche in Höhe H, Halme rundherum
+    flat(x, z, w, d, M.soil, 0.013); flat(x + 0.3, z + 0.3, w - 0.6, d - 0.6, topM, H);
+    for (const [a, b, c, e] of [[x, z, x + w, z], [x + w, z, x + w, z + d], [x + w, z + d, x, z + d], [x, z + d, x, z]]) edge(a, b, c, e, H + 0.25, sideM);
+    if (H > 1.7) {   // höher als die Augen (Mais): drinnen Pflanzenreihen alle 3 m, Blätterdach auch von unten sichtbar
+      if (w >= d) for (let v = z + 3; v < z + d - 1; v += 3) edge(x + 0.4, v, x + w - 0.4, v, H + 0.1, sideM);
+      else for (let u = x + 3; u < x + w - 1; u += 3) edge(u, z + 0.4, u, z + d - 0.4, H + 0.1, sideM);
+    }
+  };
+  const baleAt = (x, z, rot, wrapped) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 1.25, 16), wrapped ? M.wrap : M.bale); m.rotation.set(Math.PI / 2, rot, 0, 'YXZ'); m.position.set(x, 0.75, z);
+    m.castShadow = true; m.receiveShadow = true; scene.add(m); collider(x, 0, z, 1.4, 1.5, 1.4);
+  };
+  const tractor = (x, z, rot) => {   // Traktor (vorne = +x): grüne Haube, Kabine, große Hinterräder
+    const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rot;
+    const b = (w, h, d, m, px, py, pz) => { const me = new THREE.Mesh(boxGeo(w, h, d, 0, 0.05), m); me.position.set(px, py + h / 2, pz); me.castShadow = true; g.add(me); };
+    b(2.0, 1.0, 1.0, M.trGreen, 1.0, 0.9, 0); b(1.5, 0.35, 1.6, MAT.dark, -0.6, 0.85, 0); b(1.4, 1.6, 1.5, CAR_GLASS, -0.6, 1.2, 0); b(1.6, 0.1, 1.7, M.trGreen, -0.6, 2.8, 0);
+    b(0.3, 0.9, 0.1, MAT.dark, 1.6, 1.9, 0.3);   // Auspuff
+    for (const [wx, rr, wd] of [[-0.9, 0.85, 0.55], [1.4, 0.5, 0.35]]) for (const s of [-1, 1]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(rr, rr, wd, 18), TIRE); w.rotation.x = Math.PI / 2; w.position.set(wx, rr, s * (0.95 + wd / 2)); g.add(w); }
+    scene.add(g); collider(x, 0, z, 4.2, 2.8, 4.2);
+  };
+  // feste Zuordnung (für alle Spieler gleich): eigener Zufall mit festem Startwert
+  let sd = 4242; const fr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  const KINDS = [['wheat', 3], ['corn', 2], ['rape', 2], ['plow', 2], ['rows', 2], ['hay', 2]];
+  let tractors = 0;
+  for (const [x, z, w, d] of WELT_FIELDS) {
+    const nearRunway = x + w > 1555 && x < 1690 && z < 330 && z + d > -330;
+    let kind = 'hay';
+    if (!nearRunway) { let t = fr() * 13; for (const [k, wgt] of KINDS) if ((t -= wgt) < 0) { kind = k; break; } }
+    else fr();
+    if (kind === 'wheat') stand(x, z, w, d, 0.95, M.wheat, M.wheatS);
+    else if (kind === 'corn') stand(x, z, w, d, 2.3, M.corn, M.cornS);
+    else if (kind === 'rape') stand(x, z, w, d, 1.35, M.rape, M.rapeS);
+    else {
+      flat(x, z, w, d, M[kind], 0.013);
+      if (kind === 'hay') {   // Rundballen in zwei, drei lockeren Reihen
+        const wrapped = fr() < 0.4, ax = w >= d, L = ax ? w : d, D = ax ? d : w, n = Math.min(12, Math.floor(L * D / 450));
+        for (let k = 0; k < n; k++) { const u = 6 + fr() * (L - 12), v = D * (0.25 + 0.5 * Math.floor(fr() * 3) / 2) + (fr() - 0.5) * 3;
+          baleAt(ax ? x + u : x + v, ax ? z + v : z + u, fr() * 3, wrapped); }
+      } else if (kind === 'plow' && tractors < 2 && w * d > 2500) { tractor(x + w * 0.3, z + d * 0.5, w >= d ? 0 : Math.PI / 2); tractors++; }
+    }
+  }
+}
 /* Ringstadt: Stadtteil zwischen Ringstraße (x 345) und Ostallee (x 480) – Altbau-Häuserzeilen, Hotels, Fan-Shops;
    verbindet die alte Karte nahtlos mit F1-Ring und Flughafen. Dazu Bebauung rund um Rennstrecke und Flughafen. */
 function weltRingstadt(road, reserve) {
@@ -3369,6 +3490,7 @@ function buildWeltMap() {
   }
   weltF1(road); weltAirport(road); weltMilitaer(road);   // vor dem Ring: Strecke frei halten (Bäume)
   weltRing(road, S);
+  weltFields();   // Felder auf den freien Wiesen
 
   /* --- Mopeds --- */
   for (const [x, z, ax] of [[-6, -20, false], [6, 40, false], [-60, 8, true], [70, -6, true], [-55, 70, false], [-110, 62, false], [120, -35, true], [230, -100, true], [-150, -20, false], [160, 140, true]]) car(x, z, ax);
