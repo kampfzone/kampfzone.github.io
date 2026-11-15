@@ -1599,12 +1599,15 @@ function facadeCanvases(s) {
   return P;
 }
 function facadeMats(P, opt = {}) {
-  const tex = (cv, srgb) => { const t = new THREE.CanvasTexture(halfOnTouch(cv)); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = MAX_ANISO; if (srgb) t.encoding = THREE.sRGBEncoding; return t; };
+  const wrap = opt.clamp ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;   // Sammelbild (Atlas): nicht wiederholen
+  const tex = (cv, srgb) => { const t = new THREE.CanvasTexture(halfOnTouch(cv)); t.wrapS = t.wrapT = wrap; t.anisotropy = MAX_ANISO; if (srgb) t.encoding = THREE.sRGBEncoding; return t; };
   const extra = {};
   if (!TOUCH) {   // Handy: ohne Relief (Speicher)
-    const s = P.hc.width, src = P.gh.getImageData(0, 0, s, s).data, im = P.gh.createImageData(s, s), d = im.data, k = opt.relief || 5;
-    const H = (x, y) => src[((((y % s) + s) % s) * s + (((x % s) + s) % s)) * 4];
+    const s = P.hc.width, src = P.gh.getImageData(0, 0, s, s).data, im = P.gh.createImageData(s, s), d = im.data, k = opt.relief || 5, cs = opt.cell || s;
+    let bx = 0, by = 0;   // Ursprung des aktuellen Feldes (im Atlas wiederholt sich jedes Feld für sich)
+    const H = (x, y) => src[((by + (((y - by) % cs) + cs) % cs) * s + (bx + (((x - bx) % cs) + cs) % cs)) * 4];
     for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+      bx = x - x % cs; by = y - y % cs;
       const nx = -(H(x + 1, y) - H(x - 1, y)) / 255 * k, ny = (H(x, y + 1) - H(x, y - 1)) / 255 * k, l = Math.hypot(nx, ny, 1), i = (y * s + x) * 4;
       d[i] = (nx / l * 0.5 + 0.5) * 255; d[i + 1] = (ny / l * 0.5 + 0.5) * 255; d[i + 2] = (1 / l * 0.5 + 0.5) * 255; d[i + 3] = 255;
     }
@@ -2559,6 +2562,262 @@ function weltAirport(road) {
   // Zwei Kampfjets startbereit am Ostende der Bahn (Start nach Westen, 485 m Bahn reichen bei Vollgas locker)
   MAP_VEHICLES.push({ x: 972, z: RZ - 12, yaw: Math.PI, kind: 'plane', ctype: 'jet' }, { x: 945, z: RZ + 14, yaw: Math.PI, kind: 'plane', ctype: 'jet' });
   (window.MAP_POIS = window.MAP_POIS || []).push({ x: 960, z: RZ, t: '🛩' });
+}
+/* ======================= Militärflugplatz (neues Tal ganz im Osten der Karte „Welt“, hinter dem Windrad-Bergrücken) =======================
+   Die Bundesstraße führt durch ein Bergtal bis zum Kasernentor. Innen: Zaun mit Stacheldraht und Wachtürmen, Wache mit Schranken,
+   Start-/Landebahn 18/36 (600 m) mit Rollweg und Vorfeld, sechs Flugzeug-Schutzbauten (Bunker), Wartungshalle, Tower,
+   Kommandantur mit Fahnen, Kasernen, Exerzierplatz, Sportplatz, Tanklager, Munitionsbunker, Flak-Stellungen, drehendes Radar
+   und Radarkuppel – dazu fliegbare Kampfjets, Hubschrauber und Panzer. */
+const MIL = { X0: 1178, X1: 1676, Z0: -340, Z1: 340, GATE: 1182, RX: 1605, RW: 40, RZ0: -300, RZ1: 300, TX: 1545 };
+function weltMilitaer(road) {
+  const { X0, X1, Z0, Z1, RX, RW, RZ0, RZ1, TX } = MIL, { LINE } = trackMats();
+  const NR = { round: 0 }, DEC = { decor: true, round: 0, shadow: false };
+  // --- Materialien ---
+  const blobs = (g, s, cols, n, r0, r1) => {   // Tarnflecken (nahtlos kachelbar)
+    for (let i = 0; i < n; i++) {
+      const x = Math.random() * s, y = Math.random() * s, pts = [];
+      for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2, r = r0 + Math.random() * (r1 - r0); pts.push([Math.cos(a) * r, Math.sin(a) * r * 0.65]); }
+      g.fillStyle = cols[i % cols.length];
+      for (const dx of [-s, 0, s]) for (const dy of [-s, 0, s]) { g.beginPath(); pts.forEach(([px, py], k) => k ? g.lineTo(x + dx + px, y + dy + py) : g.moveTo(x + dx + px, y + dy + py)); g.closePath(); g.fill(); }
+    }
+  };
+  const CAMO = new THREE.MeshStandardMaterial({ map: canvasTex((g, s) => { g.fillStyle = '#4e5634'; g.fillRect(0, 0, s, s); blobs(g, s, ['#3b4229', '#6d6142', '#262922', '#5d6a42'], 46, 14, 34); speckle(g, s, 4000, '0,0,0', 0.08, 2); }, 256), roughness: 0.85 });
+  CAMO.userData.tile = 9;
+  const OLIVE = new THREE.MeshStandardMaterial({ color: 0x4a5230, roughness: 0.75, metalness: 0.15 });
+  const OLIVE_D = new THREE.MeshStandardMaterial({ color: 0x353a24, roughness: 0.8 });
+  const WIRE = new THREE.MeshStandardMaterial({ color: 0x7a7f84, roughness: 0.4, metalness: 0.75 });
+  const FENCE = new THREE.MeshStandardMaterial({ map: (() => {   // Maschendraht (durchsichtig zwischen den Drähten)
+    const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+    g.strokeStyle = '#a3a8ad'; g.lineWidth = 2.2;
+    for (let k = -64; k <= 64; k += 16) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k + 64, 64); g.stroke(); g.beginPath(); g.moveTo(k + 64, 0); g.lineTo(k, 64); g.stroke(); }
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.encoding = THREE.sRGBEncoding; t.anisotropy = MAX_ANISO; return t;
+  })(), alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.45, metalness: 0.7 });
+  const HAS_M = pbr('concrete', 4, { mat: { color: new THREE.Color(0.62, 0.64, 0.56), side: THREE.DoubleSide } });
+  const YEL = new THREE.MeshStandardMaterial({ color: 0xe0b532, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -2 });
+  const RLM = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2c0, emissiveIntensity: 1.2 });
+  const RLG = new THREE.MeshStandardMaterial({ color: 0x40ff70, emissive: 0x30ff60, emissiveIntensity: 1.2 });
+  const WHITE2 = new THREE.MeshStandardMaterial({ color: 0xe9e8e2, roughness: 0.5, side: THREE.DoubleSide });
+  const STRIPE = new THREE.MeshStandardMaterial({ roughness: 0.5, map: (() => {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 8; const g = c.getContext('2d');
+    for (let k = 0; k < 8; k++) { g.fillStyle = k % 2 ? '#f2f2f2' : '#c8102e'; g.fillRect(k * 16, 0, 16, 8); }
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t; })() });
+  const flagMat = (draw) => new THREE.MeshStandardMaterial({ map: canvasTex(draw, 128, false), side: THREE.DoubleSide, roughness: 0.8 });
+  const star = (g, x, y, r, col) => { g.fillStyle = col; g.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? r * 0.42 : r; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } g.fill(); };
+  const FLAGS = [
+    flagMat((g, s) => { g.fillStyle = '#2f3b22'; g.fillRect(0, 0, s, s); g.fillStyle = '#c9a43a'; g.fillRect(0, s * 0.44, s, s * 0.12); star(g, s * 0.5, s * 0.5, s * 0.2, '#e8c34a'); }),
+    flagMat((g, s) => { g.fillStyle = '#1d3a5f'; g.fillRect(0, 0, s, s); g.fillStyle = '#e9e8e2'; g.fillRect(0, s * 0.3, s, s * 0.08); g.fillRect(0, s * 0.62, s, s * 0.08); star(g, s * 0.5, s * 0.5, s * 0.14, '#e9e8e2'); }),
+  ];
+  const sign = (x, y, z, w, h, rot, txt, bg = '#2f3b22', fg = '#ffffff') => tkSign(x, y, z, w, h, rot, tkSignMat(txt, bg, fg, false));
+  // senkrechte Fläche zwischen zwei Punkten (Textur in Weltgröße)
+  const vPlane = (x0, z0, x1, z1, y, h, mat, tile) => {
+    const L = Math.hypot(x1 - x0, z1 - z0), g = new THREE.PlaneGeometry(L, h), uv = g.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * L / tile, uv.getY(i) * h / tile);
+    const m = new THREE.Mesh(withUv2(g), mat); m.position.set((x0 + x1) / 2, y + h / 2, (z0 + z1) / 2); m.rotation.y = -Math.atan2(z1 - z0, x1 - x0); scene.add(m); return m;
+  };
+  // Zaun (achsparallel): Maschendraht, Pfosten, Ausleger mit drei Reihen Stacheldraht nach außen (ox/oz), nicht überkletterbar
+  const fence = (x0, z0, x1, z1, ox, oz) => {
+    const alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0), L = alongX ? Math.abs(x1 - x0) : Math.abs(z1 - z0);
+    const sx = Math.sign(x1 - x0), sz = Math.sign(z1 - z0), at = t => [x0 + (alongX ? sx * t : 0), z0 + (alongX ? 0 : sz * t)];
+    for (let t = 0; t < L - 0.01; t += 80) { const [a, b] = at(t), [c, d] = at(Math.min(L, t + 80)); vPlane(a, b, c, d, 0, 2.6, FENCE, 1.2); }
+    for (let t = 0; t <= L + 0.01; t += 5) {
+      const [x, z] = at(t); addBox(x, 0, z, 0.1, 2.75, 0.1, WIRE, 1, DEC);
+      if (Math.round(t) % 10 === 0) { const arm = new THREE.Mesh(boxGeo(0.05, 0.6, 0.05, 0), WIRE); arm.position.set(x + ox * 0.21, 2.81, z + oz * 0.21); if (oz) arm.rotation.x = oz * 0.8; else arm.rotation.z = -ox * 0.8; scene.add(arm); }
+    }
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    for (const k of [1, 2, 3]) addBox(cx + ox * 0.14 * k, 2.6 + 0.14 * k, cz + oz * 0.14 * k, alongX ? L : 0.025, 0.025, alongX ? 0.025 : L, WIRE, 1, DEC);   // Stacheldraht
+    addBox(cx, 0.02, cz, alongX ? L : 0.03, 0.03, alongX ? 0.03 : L, WIRE, 1, DEC);   // Spanndraht unten
+    collider(cx, 0, cz, alongX ? L + 0.3 : 0.4, 3.3, alongX ? 0.4 : L + 0.3);
+    const warn = MIL.warn || (MIL.warn = tkSignMat('⚠ MILITÄRISCHER SICHERHEITSBEREICH', '#ffffff', '#c8102e', false));   // Warnschilder außen
+    for (let t = 60; t < L - 30; t += 120) { const [x, z] = at(t); tkSign(x + ox * 0.08, 1.5, z + oz * 0.08, 2.6, 0.65, oz ? (oz > 0 ? 0 : Math.PI) : (ox > 0 ? Math.PI / 2 : -Math.PI / 2), warn); }
+  };
+  const watchtower = (x, z) => {
+    for (const a of [-1.2, 1.2]) for (const b of [-1.2, 1.2]) addBox(x + a, 0, z + b, 0.22, 6.2, 0.22, TKM.wood, 1, NR);
+    for (const y of [2.2, 4.2]) { addBox(x, y, z - 1.2, 2.6, 0.12, 0.12, TKM.wood, 1, DEC); addBox(x, y, z + 1.2, 2.6, 0.12, 0.12, TKM.wood, 1, DEC); }
+    addBox(x, 6, z, 3.2, 0.2, 3.2, TKM.wood, 1, NR);
+    for (const [a, b, w, d] of [[0, -1.55, 3.2, 0.1], [0, 1.55, 3.2, 0.1], [-1.55, 0, 0.1, 3.2], [1.55, 0, 0.1, 3.2]]) addBox(x + a, 6.2, z + b, w, 1.0, d, TKM.wood, 1, NR);
+    for (const a of [-1.5, 1.5]) for (const b of [-1.5, 1.5]) addBox(x + a, 7.2, z + b, 0.12, 1.3, 0.12, TKM.wood, 1, DEC);
+    addBox(x, 8.5, z, 3.9, 0.18, 3.9, OLIVE_D, 1, { decor: true, round: 0 });
+    addBox(x + 1.3, 7.7, z + 1.3, 0.45, 0.4, 0.45, MAT.dark, 1, DEC); addBox(x + 1.3, 7.75, z + 1.54, 0.34, 0.3, 0.03, LAMP_MAT, 1, DEC);   // Suchscheinwerfer
+    addBox(x - 1.62, 0, z, 0.06, 6.2, 0.55, MAT.metal, 1, DEC);   // Leiter
+  };
+  const has = (cx, cz, n) => {   // Flugzeug-Schutzbau: Betonbogen (Öffnung nach Osten), Rückwand, zur Seite geschobene Tore
+    const R = 11, L = 28, g = new THREE.CylinderGeometry(R, R, L, 20, 1, true, 0, Math.PI); g.rotateZ(Math.PI / 2);
+    const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * Math.PI * R / 4, uv.getY(i) * L / 4);
+    const m = new THREE.Mesh(withUv2(g), HAS_M); m.position.set(cx, 0, cz); m.castShadow = true; m.receiveShadow = true; scene.add(m);
+    const bk = new THREE.Mesh(withUv2(new THREE.CircleGeometry(R, 20, 0, Math.PI)), HAS_M); bk.position.set(cx - L / 2, 0, cz); bk.rotation.y = Math.PI / 2; scene.add(bk);
+    for (const s of [-1, 1]) addBox(cx + L / 2 + 0.6, 0, cz + s * (R + 2.4), 0.8, 7.5, 6, MAT.concrete, 2.6, NR);   // Tore (offen)
+    tkSign(cx + L / 2 + 1.02, 4.2, cz - R - 2.4, 3.2, 1.6, Math.PI / 2, tkSignMat(n, '#2f3b22', '#ffffff', false));
+    for (const s of [-1, 1]) collider(cx, 0, cz + s * (R - 0.8), L, 8, 1.6);
+    collider(cx - L / 2 - 0.3, 0, cz, 0.8, 10, 2 * R);
+    decalT(cx, cz, L, 2 * R, MAT.concreteFloor, 2.7, 0, 0.011);
+    decalT((cx + L / 2 + TX - 9) / 2, cz, TX - 9 - (cx + L / 2), 22, MAT.concreteFloor, 2.7, 0, 0.011);   // Zufahrt zum Rollweg
+    decalT((cx - L / 2 + 4 + TX) / 2, cz, TX - (cx - L / 2 + 4), 0.4, YEL, 0, 0, 0.02);
+  };
+  const milTruck = (x, z, rot) => {   // Militär-Lkw mit Plane (vorne = +x)
+    const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rot;
+    const b = (w, h, d, m, px, py, pz) => { const me = new THREE.Mesh(boxGeo(w, h, d, 0, 0.04), m); me.position.set(px, py + h / 2, pz); me.castShadow = true; g.add(me); };
+    b(2.2, 2.0, 2.4, OLIVE, 2.9, 0.8, 0); b(0.06, 0.7, 2.0, CAR_GLASS, 4.02, 1.85, 0);
+    b(5.2, 0.4, 2.5, OLIVE_D, -0.9, 0.8, 0); b(5.0, 2.1, 2.45, OLIVE, -0.9, 1.2, 0);
+    for (const t of [2.9, -0.4, -2.2]) for (const s of [-1, 1]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.4, 14), TIRE); w.rotation.x = Math.PI / 2; w.position.set(t, 0.55, s * 1.1); g.add(w); }
+    scene.add(g);
+    const along = Math.abs(Math.sin(rot)) > 0.5; collider(x, 0, z, along ? 2.6 : 7.6, 3.3, along ? 7.6 : 2.6);
+  };
+  const flak = (x, z) => {   // Flak-Stellung: Sandsack-Ring mit Zwillingsgeschütz
+    for (let k = 1; k < 10; k++) { const a = k / 10 * Math.PI * 2; addBox(x + Math.cos(a) * 4, 0, z + Math.sin(a) * 4, 1.0, 1.1, 2.6, MAT.sandbag, 1, { rotY: -a, round: 0.2 }); }
+    const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = srand() * 6;
+    const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 0.8, 14), OLIVE_D); cyl.position.y = 0.4; g.add(cyl);
+    const mt = new THREE.Mesh(boxGeo(1.6, 1.0, 1.4, 0, 0.05), OLIVE); mt.position.y = 1.3; g.add(mt);
+    for (const s of [-0.35, 0.35]) { const br = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 3.2, 8), MAT.dark); br.rotation.z = -0.85; br.position.set(1.2, 2.3, s); g.add(br); }
+    scene.add(g); collider(x, 0, z, 2.4, 2, 2.4);
+  };
+  const flagpole = (x, z, fm) => {
+    addBox(x, 0, z, 0.18, 11, 0.18, MAT.metal, 1, { round: 0 });
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.5), fm); f.position.set(x + 1.3, 10.1, z); scene.add(f);
+  };
+
+  /* --- Zaun rundum, Tor im Westen, Wachtürme --- */
+  fence(X0, Z0, X1, Z0, 0, -1); fence(X0, Z1, X1, Z1, 0, 1); fence(X1, Z0, X1, Z1, 1, 0);
+  fence(X0, Z0, X0, -9, -1, 0); fence(X0, 9, X0, Z1, -1, 0);
+  for (const [x, z] of [[X0 + 3, Z0 + 3], [X0 + 3, Z1 - 3], [X1 - 3, Z0 + 3], [X1 - 3, Z1 - 3], [X0 + 3, -24], [(X0 + X1) / 2, Z0 + 3], [(X0 + X1) / 2, Z1 - 3]]) watchtower(x, z);
+  { const GX = MIL.GATE + 4;   // Wache mit Schranken (hochgeklappt), großes Schild an der Zufahrt
+    addBox(GX + 9, 0, -13, 6, 3, 4.4, MAT.plaster, 2.7, NR); addBox(GX + 9, 3, -13, 6.8, 0.25, 5.2, MAT.dark, 1, { decor: true, round: 0 });
+    addBox(GX + 9, 1.1, -10.78, 4.6, 1.2, 0.05, CAR_GLASS, 0, DEC); sign(GX + 9, 2.6, -10.74, 2.4, 0.5, 0, 'WACHE');
+    for (const s of [-1, 1]) {
+      addBox(GX, 0, s * 6.6, 0.35, 1.0, 0.35, STRIPE, 0, { round: 0 });
+      const ag = boxGeo(0.12, 0.12, 6, 0); ag.translate(0, 0, -s * 3); const arm = new THREE.Mesh(ag, STRIPE); arm.position.set(GX, 1.0, s * 6.6); arm.rotation.x = s * 1.25; scene.add(arm);
+    }
+    for (const s of [-1, 1]) addBox(GX - 3, 0, -10.5 + s * 3.6, 0.15, 3.2, 0.15, MAT.metal, 1, { round: 0 });
+    sign(GX - 3, 2.8, -10.5, 7.6, 1.4, -Math.PI / 2, 'MILITÄRFLUGPLATZ KAMPFZONE');
+    sign(GX - 3, 1.7, -10.5, 7.6, 0.55, -Math.PI / 2, 'SPERRGEBIET · Zutritt nur mit Ausweis', '#ffffff', '#c8102e');
+  }
+
+  /* --- Straßen auf dem Gelände --- */
+  road(X0, 0, 1468, 0, 9); road(1260, Z0 + 30, 1260, Z1 - 30, 8);
+  for (let x = 1200; x <= 1450; x += 30) lamp(x, -6.6, 1);
+  for (let x = 1206; x <= 1440; x += 26) if (Math.abs(x - 1260) > 9 && !(x > 1420 && x < 1460)) leafTree(x, 7.2, 0.85);
+
+  /* --- Start- und Landebahn 18/36 (600 m × 40 m), Rollweg, Vorfeld --- */
+  const RL = RZ1 - RZ0;
+  decalT(RX, 0, RW, RL, MAT.road, 3, 0, 0.01);
+  for (const sd of [-1, 1]) decalT(RX + sd * (RW / 2 + 3), 0, 6, RL, MAT.concreteFloor, 2.7, 0, 0.009);   // Schultern
+  for (let z = RZ0 + 60; z < RZ1 - 60; z += 30) decalT(RX, z, 0.9, 15, LINE, 0, 0, 0.02);                  // Mittellinie
+  for (const sd of [-1, 1]) decalT(RX + sd * (RW / 2 - 1.2), 0, 0.9, RL - 4, LINE, 0, 0, 0.02);            // Randlinien
+  for (const tz of [RZ0 + 14, RZ1 - 14]) for (let k = 0; k < 5; k++) for (const sd of [-1, 1]) decalT(RX + sd * (3.5 + k * 3), tz, 1.8, 22, LINE, 0, 0, 0.021);   // Schwellen
+  for (const tz of [RZ0 + 110, RZ1 - 110]) for (const sd of [-1, 1]) decalT(RX + sd * 7, tz, 4, 40, LINE, 0, 0, 0.021);   // Aufsetzzonen
+  const num = (txt, z, rot) => {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 128; const g = c.getContext('2d');
+    g.fillStyle = '#ececec'; g.font = '900 112px Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, 128, 68);
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding;
+    decalT(RX, z, 14, 28, new THREE.MeshStandardMaterial({ map: t, transparent: true, alphaTest: 0.4, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -3 }), 0, rot, 0.022);
+  };
+  num('36', RZ1 - 50, 0); num('18', RZ0 + 50, Math.PI);
+  for (const tz of [RZ0 + 75, RZ1 - 75]) { decalT(RX, tz, RW - 2, 0.25, MAT.dark, 0, 0, 0.023); for (const sd of [-1, 1]) addBox(RX + sd * (RW / 2 + 1.5), 0, tz, 1.2, 0.6, 1.6, YEL, 1, DEC); }   // Fangseil
+  for (let z = RZ0 + 5; z <= RZ1 - 5; z += 30) for (const sd of [-1, 1]) addBox(RX + sd * (RW / 2 + 1), 0, z, 0.35, 0.3, 0.35, RLM, 0, DEC);   // Randfeuer
+  for (const tz of [RZ0 - 1, RZ1 + 1]) for (let x = RX - RW / 2 + 2; x <= RX + RW / 2 - 2; x += 4) addBox(x, 0, tz, 0.35, 0.3, 0.35, RLG, 0, DEC);   // Schwellenfeuer
+  for (const tz of [RZ0 - 18, RZ1 + 18]) { decalT(RX, tz, RW, 34, MAT.concreteFloor, 2.7, 0, 0.009);   // Vorfeld der Schwelle mit gelben Pfeilen
+    for (let k = 0; k < 3; k++) for (const sd of [-1, 1]) { const zz = tz + (tz < 0 ? 1 : -1) * (k * 9 - 9); decalT(RX + sd * 9, zz, 1.2, 20, YEL, 0, sd * (tz < 0 ? -1 : 1) * 1.1, 0.02); } }
+  decalT(TX, 0, 18, RL, MAT.road, 3, 0, 0.01); decalT(TX, 0, 0.4, RL, YEL, 0, 0, 0.02);   // Rollweg
+  for (const z of [RZ0 + 30, 0, RZ1 - 30]) { decalT((TX + RX - RW / 2) / 2, z, RX - RW / 2 - TX, 18, MAT.road, 3, 0, 0.0095); decalT((TX + RX - RW / 2) / 2, z, RX - RW / 2 - TX, 0.4, YEL, 0, 0, 0.02);
+    for (const o of [-0.6, 0.6]) decalT(RX - RW / 2 - 8 + o, z, 0.25, 16, YEL, 0, 0, 0.021); }   // Haltelinie vor der Bahn
+  decalT(1502, 0, 68, 260, MAT.concreteFloor, 2.7, 0, 0.011);   // Vorfeld
+  for (const z of [-100, -35, 35, 100]) { decalT(1505, z, 62, 0.4, YEL, 0, 0, 0.02); decalT(1478, z, 0.4, 9, YEL, 0, 0, 0.02); }
+  for (const [n, z] of [['HAS 1', -285], ['HAS 2', -225], ['HAS 3', -165], ['HAS 4', 165], ['HAS 5', 225], ['HAS 6', 285]]) has(1438, z, n);
+  // Windsack
+  addBox(1640, 0, 205, 0.2, 6, 0.2, MAT.metal, 1, { round: 0 });
+  { const sock = new THREE.Mesh(new THREE.ConeGeometry(0.5, 3, 12, 1, true), new THREE.MeshStandardMaterial({ color: 0xff6a00, roughness: 0.8, side: THREE.DoubleSide })); sock.rotation.z = Math.PI / 2 + 0.25; sock.position.set(1641.5, 5.6, 205); scene.add(sock); }
+
+  /* --- Gebäude --- */
+  { const x = 1440, z = 40;   // Tower mit Blick auf Vorfeld und Bahn
+    addBox(x, 0, z, 18, 12, 12, TKM.officeDark, 16, NR); addBox(x, 12, z, 19, 0.4, 13, MAT.dark, 1, { decor: true, round: 0 });
+    addBox(x + 3, 12.4, z, 8, 4, 8, TKM.glassBlue, 2.6, NR); addBox(x + 3, 16.4, z, 9.5, 0.4, 9.5, MAT.dark, 1, { decor: true, round: 0 });
+    addBox(x + 5, 16.8, z + 2, 0.15, 6, 0.15, MAT.metal, 1, DEC); addBox(x + 1, 16.8, z - 2, 0.12, 4, 0.12, MAT.metal, 1, DEC);
+    sign(x + 9.06, 9.4, z, 6, 1.4, Math.PI / 2, 'TOWER'); }
+  { const x = 1228, z = -34;   // Kommandantur mit Vordach und Fahnen
+    addBox(x, 0, z, 40, 12, 14, TKM.tile, 16, NR); addBox(x, 12, z, 41, 0.6, 15, MAT.dark, 1, { decor: true, round: 0 });
+    addBox(x, 3.4, z + 8.6, 10, 0.3, 3.2, MAT.concrete, 2, { decor: true, round: 0 });
+    for (const s of [-1, 1]) addBox(x + s * 4.6, 0, z + 9.8, 0.4, 3.4, 0.4, MAT.concrete, 2, NR);
+    sign(x, 10.4, z + 7.06, 14, 1.6, 0, '★ KOMMANDANTUR');
+    for (let k = -1; k <= 1; k++) flagpole(x + k * 8 - 1.3, z + 16, FLAGS[k === 0 ? 0 : 1]); }
+  for (const [k, z] of [[0, 50], [1, 100], [2, 150]]) {   // Unterkünfte
+    addBox(1222, 0, z, 40, 8, 14, TKM.office, 16, NR); addBox(1222, 8, z, 41, 0.5, 15, MAT.dark, 1, { decor: true, round: 0 });
+    sign(1222, 6.4, z - 7.06, 11, 1.3, Math.PI, 'UNTERKUNFT ' + 'ABC'[k]);
+  }
+  addBox(1222, 0, 205, 40, 6, 20, MAT.hallMetal, 2.6, NR); addBox(1222, 6, 205, 41, 0.4, 21, MAT.dark, 1, { decor: true, round: 0 });
+  sign(1222, 4.6, 194.94, 12, 1.3, Math.PI, 'TRUPPENKÜCHE');
+  // Exerzierplatz mit Fahnenmast, Sportplatz mit Toren
+  decalT(1320, 110, 70, 90, MAT.concreteFloor, 2.7, 0, 0.009);
+  for (const sd of [-1, 1]) { decalT(1320, 110 + sd * 44, 70, 0.3, LINE, 0, 0, 0.02); decalT(1320 + sd * 34, 110, 0.3, 90, LINE, 0, 0, 0.02); }
+  flagpole(1318.7, 110, FLAGS[0]);
+  decalT(1320, 230, 70, 46, MAT.grass, 2, 0, 0.012);
+  for (const sd of [-1, 1]) { decalT(1320, 230 + sd * 22, 68, 0.2, LINE, 0, 0, 0.02); decalT(1320 + sd * 34, 230, 0.2, 44, LINE, 0, 0, 0.02);
+    for (const o of [-3.6, 3.6]) addBox(1320 + sd * 34, 0, 230 + o, 0.12, 2.4, 0.12, TKM.white, 1, DEC);
+    addBox(1320 + sd * 34, 2.4, 230, 0.12, 0.12, 7.32, TKM.white, 1, DEC); }
+  decalT(1320, 230, 0.2, 44, LINE, 0, 0, 0.02);
+  // Wartungshalle (Tarnanstrich, Bogendach, großes Tor zum Vorfeld)
+  { const x = 1340, z = -190, w = 56, d = 44, h = 13, R = d / 2 + 0.6;
+    addBox(x, 0, z, w, h, d, CAMO, 9, NR);
+    const rg = new THREE.CylinderGeometry(R, R, w + 1, 20, 1, true, 0, Math.PI); rg.rotateZ(Math.PI / 2); rg.scale(1, 0.32, 1);
+    const roof = new THREE.Mesh(withUv2(rg), OLIVE_D); roof.position.set(x, h, z); roof.castShadow = true; scene.add(roof);
+    for (const s of [-1, 1]) { const cg = new THREE.CircleGeometry(R, 20, 0, Math.PI); cg.scale(1, 0.32, 1); const cap = new THREE.Mesh(withUv2(cg), OLIVE_D); cap.position.set(x + s * (w / 2 + 0.5), h, z); cap.rotation.y = s * Math.PI / 2; scene.add(cap); }
+    const door = new THREE.Mesh(new THREE.PlaneGeometry(38, 10), MAT.dark); door.position.set(x + w / 2 + 0.03, 5, z); door.rotation.y = Math.PI / 2; scene.add(door);
+    for (let k = -4; k <= 4; k++) addBox(x + w / 2 + 0.06, 0, z + k * 4.2, 0.08, 10, 0.12, MAT.metal, 1, DEC);   // Torsegmente
+    sign(x + w / 2 + 0.08, 11.5, z, 16, 1.4, Math.PI / 2, 'WARTUNG · STAFFEL 1');
+    decalT(x + w / 2 + 21, z, 42, 40, MAT.concreteFloor, 2.7, 0, 0.011); }
+  // Fahrzeughalle (offener Unterstand) mit Militär-Lkw
+  { const x = 1318, z = -40;
+    for (let k = -2; k <= 2; k++) for (const s of [-1, 1]) addBox(x + k * 11, 0, z + s * 7.5, 0.35, 5.2, 0.35, MAT.metal, 1, { round: 0 });
+    addBox(x, 5.2, z, 46, 0.35, 17, OLIVE_D, 1, { decor: true, round: 0 }); addBox(x, 0, z - 8, 46, 5.2, 0.3, CAMO, 9, NR);
+    decalT(x, z, 46, 17, MAT.concreteFloor, 2.7, 0, 0.011);
+    for (let k = 0; k < 4; k++) milTruck(x - 16 + k * 10.5, z - 0.8, -Math.PI / 2);
+    sign(x, 4.4, z + 8.4, 10, 1.1, 0, 'FAHRZEUGHALLE'); }
+  // Tanklager mit Auffangwall
+  for (const [x, z] of [[1285, -300], [1308, -300], [1285, -277], [1308, -277]]) { const t = new THREE.Mesh(withUv2(new THREE.CylinderGeometry(7, 7, 8, 24)), OLIVE); t.position.set(x, 4, z); t.castShadow = true; t.receiveShadow = true; scene.add(t); collider(x, 0, z, 11, 8, 11); }
+  for (const [x, z, w, d] of [[1296.5, -313, 54, 0.6], [1296.5, -264, 54, 0.6], [1270, -288.5, 0.6, 49], [1323, -288.5, 0.6, 49]]) addBox(x, 0, z, w, 1.2, d, MAT.concrete, 2.6, NR);
+  sign(1296.5, 2.0, -263.6, 9, 1.2, 0, 'TANKLAGER · RAUCHEN VERBOTEN', '#ffd21f', '#111111');
+  addBox(1296.5, 0, -262.8, 0.12, 1.4, 0.12, MAT.metal, 1, DEC);
+  // Munitionsbunker (mit Erde bedeckt), Flak-Stellungen
+  for (const x of [1300, 1335, 1370]) {
+    const g = new THREE.CylinderGeometry(4.5, 4.5, 12, 12, 1, true, Math.PI / 2, Math.PI); g.rotateX(Math.PI / 2);
+    const mound = new THREE.Mesh(withUv2(g), MAT.grass); mound.position.set(x, 0, 300); mound.castShadow = true; scene.add(mound);
+    addBox(x, 0, 293.7, 9.4, 4.2, 0.6, MAT.concrete, 2.6, NR); addBox(x, 0, 306.3, 9.4, 4.2, 0.6, MAT.concrete, 2.6, NR);
+    const dr = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2.6), OLIVE_D); dr.position.set(x, 1.3, 293.38); dr.rotation.y = Math.PI; scene.add(dr);
+    collider(x, 0, 300, 9, 4.5, 12);
+  }
+  for (const [x, z] of [[1480, -318], [1480, 318], [1660, 0]]) flak(x, z);
+  // Drehendes Rundsuchradar auf Gittermast + Radarkuppel
+  { const x = 1642, z = -318, H = 16;
+    for (const a of [-1.4, 1.4]) for (const b of [-1.4, 1.4]) addBox(x + a, 0, z + b, 0.22, H, 0.22, MAT.metal, 1, { round: 0 });
+    for (let y = 2; y < H; y += 3.5) for (const [a, b, w, d] of [[0, -1.4, 2.8, 0.1], [0, 1.4, 2.8, 0.1], [-1.4, 0, 0.1, 2.8], [1.4, 0, 0.1, 2.8]]) addBox(x + a, y, z + b, w, 0.1, d, MAT.metal, 1, DEC);
+    addBox(x, H, z, 3.4, 0.4, 3.4, MAT.dark, 1, { decor: true, round: 0 });
+    const head = new THREE.Group(); head.position.set(x, H + 0.4, z); scene.add(head);
+    const spin = new THREE.Group(); head.add(spin);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 1.4, 10), MAT.dark); mast.position.y = 0.7; spin.add(mast);
+    const dish = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 2.2, 16, 1, true, -0.75, 1.5), WHITE2); dish.position.set(0, 2.2, -3.8); spin.add(dish);
+    const feed = new THREE.Mesh(boxGeo(0.15, 0.15, 2.6, 0), MAT.dark); feed.position.set(0, 2.2, 0); spin.add(feed);
+    noMergeDeep(head); window.WINDMILLS.push({ o: spin, axis: 'y', s: 1.3 });
+    collider(x, 0, z, 3.2, H, 3.2); }
+  { const x = 1645, z = 318;
+    addBox(x, 0, z, 7, 5, 7, MAT.concrete, 2.6, NR);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(6.5, 24, 16), TKM.white); dome.position.set(x, 10.6, z); dome.castShadow = true; scene.add(dome);
+    collider(x, 5, z, 11, 11, 11); }
+  // Hubschrauber-Landeplätze
+  { const hp = new THREE.MeshStandardMaterial({ map: (() => {
+      const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+      g.fillStyle = '#4f5348'; g.beginPath(); g.arc(128, 128, 126, 0, 7); g.fill();
+      g.lineWidth = 10; g.strokeStyle = '#f2f2f2'; g.beginPath(); g.arc(128, 128, 110, 0, 7); g.stroke();
+      g.fillStyle = '#f4f4f4'; g.fillRect(78, 64, 22, 128); g.fillRect(156, 64, 22, 128); g.fillRect(78, 117, 100, 22);
+      const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t; })(), transparent: true, alphaTest: 0.5, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2 });
+    for (const z of [60, 102]) { const pad = new THREE.Mesh(new THREE.PlaneGeometry(15, 15), hp); pad.rotation.x = -Math.PI / 2; pad.position.set(1385, 0.02, z); scene.add(pad); MAP_VEHICLES.push({ x: 1385, z, yaw: Math.PI / 2, kind: 'heli' }); } }
+
+  /* --- Fliegbare Kampfjets: zwei startbereit an der Südschwelle (Start nach Norden), zwei auf dem Vorfeld, einer im Bunker --- */
+  MAP_VEHICLES.push(
+    { x: RX - 9, z: RZ1 - 32, yaw: Math.PI / 2, kind: 'plane', ctype: 'jet' }, { x: RX + 9, z: RZ1 - 52, yaw: Math.PI / 2, kind: 'plane', ctype: 'jet' },
+    { x: 1500, z: -68, yaw: 0, kind: 'plane', ctype: 'jet' }, { x: 1500, z: 68, yaw: 0, kind: 'plane', ctype: 'jet' },
+    { x: 1436, z: -225, yaw: 0, kind: 'plane', ctype: 'jet' },
+    { x: 1300, z: -18, yaw: -Math.PI / 2, kind: 'tank' }, { x: 1336, z: -18, yaw: -Math.PI / 2, kind: 'tank' });
+  window.MAP_STREETS.push([MIL.GATE - 4, -4.5, 1468, 4.5], [1256, Z0 + 30, 1264, Z1 - 30], [RX - RW / 2, RZ0, RX + RW / 2, RZ1], [TX - 9, RZ0, TX + 9, RZ1],
+    [1468, -130, 1536, 130], ...[RZ0 + 30, 0, RZ1 - 30].map(z => [TX, z - 9, RX - RW / 2, z + 9]), ...[-285, -225, -165, 165, 225, 285].map(z => [1424, z - 11, TX - 9, z + 11]));
+  (window.MAP_POIS = window.MAP_POIS || []).push({ x: 1228, z: -34, t: '⭐' }, { x: RX, z: RZ1 - 40, t: '🛩' }, { x: 1385, z: 80, t: '🚁' });
 }
 /* Ringstadt: Stadtteil zwischen Ringstraße (x 345) und Ostallee (x 480) – Altbau-Häuserzeilen, Hotels, Fan-Shops;
    verbindet die alte Karte nahtlos mit F1-Ring und Flughafen. Dazu Bebauung rund um Rennstrecke und Flughafen. */

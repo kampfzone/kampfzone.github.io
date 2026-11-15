@@ -1,14 +1,19 @@
 {
+  "id": "./",
   "name": "Kampfzone Arena",
   "short_name": "Kampfzone",
+  "description": "Online-Shooter: Schnellspiel gegen Bots oder mit Freunden – Städte, Autos, Jets.",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
   "orientation": "landscape",
   "background_color": "#0d120f",
   "theme_color": "#0d120f",
+  "categories": ["games"],
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
