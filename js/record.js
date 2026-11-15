@@ -1,6 +1,6 @@
 /* ======================= Bildschirmaufnahme: Video vom Spiel aufnehmen =======================
    F9 oder Knopf ⏺: Aufnahme starten, nochmal = stoppen → das Video wird als Datei gespeichert
-   (Download-Ordner, Name „kampfzone-Datum-Uhrzeit.webm“ bzw. „.mp4“ auf iPhone/Mac-Safari).
+   (Download-Ordner, Name „kampfzone-Datum-Uhrzeit.mp4“ – nur in Browsern ohne MP4-Aufnahme „.webm“).
    PC: nimmt den ganzen Spiel-Tab auf – mit allen Anzeigen und Ton (der Browser fragt einmal, ob der Tab geteilt werden darf).
    Handy (oder „Abbrechen“ am PC): nimmt das Spielbild direkt auf, mit Spielton, ohne Anzeigen.
    Lenkrad-Kamera (Knopf 📱): ein Handy filmt das Lenkrad (Seite cam.html, Verbindung per QR-Code, direkt im WLAN).
@@ -31,7 +31,8 @@
 
   function pickType() {
     if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
-    for (const t of ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4;codecs=avc1,mp4a', 'video/mp4']) if (MediaRecorder.isTypeSupported(t)) return t;
+    // zuerst MP4 (H.264 + AAC): läuft auf jedem Handy, in WhatsApp & Co. – WebM nur, wenn der Browser kein MP4 aufnehmen kann (z. B. Firefox)
+    for (const t of ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']) if (MediaRecorder.isTypeSupported(t)) return t;
     return '';
   }
   // Spielton (alles, was über den Hauptregler läuft) als Tonspur abzweigen.

@@ -251,6 +251,7 @@ const KB_ACTIONS = [
   ['trackStart', 'Zur Startlinie (Rennstrecke)', ['KeyT', ''], null],
   ['tune', 'Tuning-Menü (im Auto)', ['KeyU', ''], null],
   ['nitro', 'Nitro zünden (im Auto)', ['KeyN', ''], null],
+  ['talk', 'Sprechen (Sprachchat, halten)', ['KeyB', ''], 'Talk'],
 ];
 const KB_DEFAULT = () => Object.fromEntries(KB_ACTIONS.map(a => [a[0], a[2].slice()]));
 let KB = KB_DEFAULT(), KB_LABEL = {};
