@@ -760,7 +760,7 @@ function setWreck(v, on) {
 function heliFreeSpot(x, z) {
   const R = 3.6;
   const free = (px, pz) => {
-    if (px < -430 || px > 1090 || Math.abs(pz) > 430) return false;   // innerhalb der Karte
+    if (px < -430 || px > 1750 || Math.abs(pz) > 430) return false;   // innerhalb der Karte
     const gh = groundH(px, pz);
     for (const b of nearBoxes(px, pz, R + 1)) if (b.max.x > px - R && b.min.x < px + R && b.max.z > pz - R && b.min.z < pz + R && b.max.y > gh + 0.3 && b.min.y < gh + 4) return false;
     return true;
@@ -1286,7 +1286,7 @@ function jetRide(dt) {
     moveBody(ride, ride.vel.x * dt, ride.vel.y * dt, ride.vel.z * dt);
     if (ride.blocked && v > 8) crash = true;
     // Kartenrand: automatisch wenden
-    const XMIN = -430, XMAX = 1090, ZM = 430;
+    const XMIN = -430, XMAX = 1750, ZM = 430;
     if (ride.pos.x < XMIN || ride.pos.x > XMAX || Math.abs(ride.pos.z) > ZM) {
       ride.pos.x = Math.max(XMIN, Math.min(XMAX, ride.pos.x)); ride.pos.z = Math.max(-ZM, Math.min(ZM, ride.pos.z));
       q.premultiply(_jq.setFromAxisAngle(AX_Y, Math.PI * 0.9 * dt));
@@ -1388,7 +1388,7 @@ function planeRide(dt) {
   const vyBefore = vy;
   moveBody(ride, ride.vel.x * dt, vy * dt, ride.vel.z * dt);
   // Kartenrand: wenden statt hinausfliegen
-  const XMIN = -430, XMAX = 1090, ZM = 430;
+  const XMIN = -430, XMAX = 1750, ZM = 430;
   if (ride.pos.x < XMIN || ride.pos.x > XMAX || Math.abs(ride.pos.z) > ZM) {
     ride.pos.x = Math.max(XMIN, Math.min(XMAX, ride.pos.x)); ride.pos.z = Math.max(-ZM, Math.min(ZM, ride.pos.z));
     if (!onG) { ride.yaw += Math.PI * dt * 0.9; if (!ride.edgeMsg || performance.now() - ride.edgeMsg > 3000) { ride.edgeMsg = performance.now(); showMsg('Kartenrand – bitte umkehren'); } }

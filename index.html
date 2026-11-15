@@ -397,6 +397,7 @@
     <label for="diffIn">Bot-Schwierigkeit</label>
     <select id="diffIn"><option value="easy">🟢 Leicht – reagieren langsam, treffen selten</option><option value="normal">🟡 Normal</option><option value="hard">🟠 Schwer – schnell und treffsicher</option><option value="pro">🔴 Profi – fast keine Fehler</option></select>
     <button id="btnQuick" class="bigPlay">▶ SCHNELLSPIEL GEGEN BOTS</button>
+    <button id="btnInstall" class="sec hidden" style="margin-top:8px">📲 Als App installieren</button>
     <div class="card">
       <h3>MIT FREUNDEN SPIELEN</h3>
       <div class="row">
@@ -416,7 +417,6 @@
       <button id="btnInv1" class="sec">🎒 Inventar</button>
       <button id="btnSet1" class="sec">⚙ Optionen</button>
     </div>
-    <button id="btnInstall" class="sec hidden" style="margin-top:8px">📲 Als App installieren</button>
     <div id="menuMsg"></div>
     <div id="loadInfo" style="text-align:center;font-size:12.5px;color:#9fb59f;margin-top:4px">Grafik wird geladen …</div>
     <div id="verInfo" title="Antippen = nach Update suchen" style="text-align:center;font-size:11.5px;color:#7f977f;margin-top:2px;cursor:pointer"></div>
@@ -666,22 +666,22 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="js/core.js?v=20261115-123440"></script>
-<script src="js/map.js?v=20261115-123440"></script>
-<script src="js/models.js?v=20261115-123440"></script>
-<script src="js/game.js?v=20261115-123440"></script>
-<script src="js/vehicles.js?v=20261115-123440"></script>
-<script src="js/net.js?v=20261115-123440"></script>
-<script src="js/ui.js?v=20261115-123440"></script>
-<script src="js/jobs.js?v=20261115-123440"></script>
-<script src="js/gamepad.js?v=20261115-123440"></script>
-<script src="js/keybinds.js?v=20261115-123440"></script>
-<script src="js/tuning.js?v=20261115-123440"></script>
-<script src="js/gunshop.js?v=20261115-123440"></script>
-<script src="js/boerse.js?v=20261115-123440"></script>
-<script src="js/grass.js?v=20261115-123440"></script>
-<script src="js/record.js?v=20261115-123440"></script>
-<script src="js/postfx.js?v=20261115-123440"></script>
+<script src="js/core.js?v=20261115-123924"></script>
+<script src="js/map.js?v=20261115-123924"></script>
+<script src="js/models.js?v=20261115-123924"></script>
+<script src="js/game.js?v=20261115-123924"></script>
+<script src="js/vehicles.js?v=20261115-123924"></script>
+<script src="js/net.js?v=20261115-123924"></script>
+<script src="js/ui.js?v=20261115-123924"></script>
+<script src="js/jobs.js?v=20261115-123924"></script>
+<script src="js/gamepad.js?v=20261115-123924"></script>
+<script src="js/keybinds.js?v=20261115-123924"></script>
+<script src="js/tuning.js?v=20261115-123924"></script>
+<script src="js/gunshop.js?v=20261115-123924"></script>
+<script src="js/boerse.js?v=20261115-123924"></script>
+<script src="js/grass.js?v=20261115-123924"></script>
+<script src="js/record.js?v=20261115-123924"></script>
+<script src="js/postfx.js?v=20261115-123924"></script>
 <script>
 // Als App installieren: Chrome/Edge (PC, Android) zeigen ihr Installieren-Fenster, iPhone/iPad bekommen eine Anleitung
 (function () {
@@ -691,16 +691,25 @@
   var deferred = null;
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function () {});
   if (isApp) return;   // läuft schon als App
-  if (ios) btn.classList.remove('hidden');
-  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; btn.classList.remove('hidden'); });
+  btn.classList.remove('hidden');   // immer zeigen: ohne Installieren-Fenster des Browsers gibt es eine Anleitung
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; });
   window.addEventListener('appinstalled', function () { deferred = null; btn.classList.add('hidden'); });
   btn.addEventListener('click', function () {
     if (deferred) { deferred.prompt(); deferred.userChoice.then(function (c) { if (c.outcome === 'accepted') btn.classList.add('hidden'); deferred = null; }); return; }
-    var safari = /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS|EdgiOS/.test(navigator.userAgent);
-    steps.innerHTML = ios
-      ? (safari ? '' : '<b>Öffne diese Seite zuerst in Safari</b> (andere Browser können auf dem iPhone keine Apps anlegen).<br><br>')
-        + '1. Unten (iPad: oben) auf <span class="key">Teilen ⬆</span> tippen<br>2. Nach unten wischen → <span class="key">Zum Home-Bildschirm</span><br>3. Oben rechts auf <span class="key">Hinzufügen</span><br><br>Danach startet Kampfzone über das Symbol im Vollbild – ohne Safari-Leisten.'
-      : 'In Chrome oder Edge: oben rechts im Menü <span class="key">⋮</span> → <span class="key">App installieren</span> bzw. <span class="key">Kampfzone installieren</span>.';
+    var ua = navigator.userAgent, K = function (t) { return '<span class="key">' + t + '</span>'; }, t;
+    var after = '<br><br>Danach startet Kampfzone über das Symbol im Vollbild – ohne Browser-Leisten.';
+    if (ios) t = (/CriOS|EdgiOS/.test(ua) ? '1. Oben rechts in der Adressleiste auf ' + K('Teilen ⬆') + ' tippen'
+        : /FxiOS/.test(ua) ? '1. Unten rechts auf ' + K('☰') + ' → ' + K('Teilen') + ' tippen'
+        : '1. Unten (iPad: oben) auf ' + K('Teilen ⬆') + ' tippen')
+      + '<br>2. Nach unten wischen → ' + K('Zum Home-Bildschirm') + '<br>3. Oben rechts auf ' + K('Hinzufügen') + '<br><br>Klappt es nicht? Seite in <b>Safari</b> öffnen und dort genauso.' + after;
+    else if (/Android/.test(ua)) t = (/Firefox/.test(ua) ? 'In Firefox: Menü ' + K('⋮') + ' → ' + K('Installieren') + ' bzw. ' + K('Zum Startbildschirm hinzufügen') + '.'
+        : 'Oben rechts auf das Menü ' + K('⋮') + ' → ' + K('App installieren') + ' oder ' + K('Zum Startbildschirm hinzufügen') + '.') + after;
+    else if (/Edg\//.test(ua)) t = 'In Edge: oben rechts ' + K('…') + ' → ' + K('Apps') + ' → ' + K('Diese Website als App installieren') + '.<br>Oder in der Adressleiste rechts auf das Symbol ' + K('⊞') + ' klicken.' + after;
+    else if (/Firefox/.test(ua)) t = 'Firefox kann Webseiten am PC leider nicht als App installieren.<br><br>Öffne <b>kampfzone.github.io</b> in <b>Chrome</b> oder <b>Edge</b> und klicke dort auf diesen Knopf.';
+    else if (/Chrome/.test(ua)) t = 'In Chrome: rechts in der Adressleiste auf das Symbol ' + K('⊕ / 🖥') + ' klicken → ' + K('Installieren') + '.<br><br>Kein Symbol da? Oben rechts ' + K('⋮') + ' → ' + K('Streamen, speichern und teilen') + ' → ' + K('Seite als App installieren') + '.' + after;
+    else if (/Safari/.test(ua)) t = 'Am Mac in Safari: oben im Menü ' + K('Ablage') + ' → ' + K('Zum Dock hinzufügen') + '.' + after;
+    else t = 'Öffne <b>kampfzone.github.io</b> in <b>Chrome</b> oder <b>Edge</b> und klicke dort auf diesen Knopf.';
+    steps.innerHTML = t;
     help.classList.remove('hidden');
   });
   document.getElementById('installClose').addEventListener('click', function () { help.classList.add('hidden'); });

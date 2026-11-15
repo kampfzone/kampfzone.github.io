@@ -2285,12 +2285,13 @@ function hall(x, z, w, d, h, name, doorSide) {
 function weltRing(road, S) {
   const R = 345, O = 378;   // Ringstraße, Beginn der Berge
   for (const [x0, z0, x1, z1] of [[-R, -R, R, -R], [-R, R, R, R], [-R, -R, -R, R], [R, -R, R, R]]) road(x0, z0, x1, z1, 9);
-  window.MAP_STREETS.push([-R - 4.5, -R - 4.5, R + 4.5, -R + 4.5], [-R - 4.5, R - 4.5, R + 4.5, R + 4.5], [-R - 4.5, -R - 4.5, -R + 4.5, R + 4.5], [R - 4.5, -R - 4.5, R + 4.5, R + 4.5], [-6.5, -S, 6.5, S], [-S, -6.5, WELT_XE, 6.5]);
+  window.MAP_STREETS.push([-R - 4.5, -R - 4.5, R + 4.5, -R + 4.5], [-R - 4.5, R - 4.5, R + 4.5, R + 4.5], [-R - 4.5, -R - 4.5, -R + 4.5, R + 4.5], [R - 4.5, -R - 4.5, R + 4.5, R + 4.5], [-6.5, -S, 6.5, S], [-S, -6.5, MIL.GATE, 6.5]);
   const busy = [];   // belegte Flächen (keine Bäume)
   const reserve = (x0, z0, x1, z1) => busy.push([x0, z0, x1, z1]);
   const isBusy = (x, z, pad = 0) => busy.some(([a, b, c, d]) => x > a - pad && x < c + pad && z > b - pad && z < d + pad);
   // Straßen und Ringstraße frei halten
   reserve(-8, -S, 8, S); reserve(-S, -10, WELT_XE, 10);
+  reserve(MIL.X0 - 12, MIL.Z0 - 6, MIL.X1 + 6, MIL.Z1 + 6);   // Militärflugplatz: keine Bäume auf dem Gelände
   for (const s of [-1, 1]) { reserve(-R - 7, s * R - 7, R + 7, s * R + 7); reserve(s * R - 7, -R - 7, s * R + 7, R + 7); }
 
   /* --- Industriegebiet (Norden über der Stadt): Hallen, Container, Lkw --- */
@@ -2342,11 +2343,11 @@ function weltRing(road, S) {
     addBox(-341, 0, -14, 0.15, 2.4, 0.15, TKM.wood, 1, { round: 0 }); }
 
   /* --- Wälder im Ring und in den Bergen (instanziert, mit Stamm-Kollision) --- */
-  const TN = 1500, td = new THREE.Object3D();
+  const TN = 1800, td = new THREE.Object3D();
   const leafM = new THREE.MeshLambertMaterial({ map: TEX.needles, alphaTest: 0.5, side: THREE.DoubleSide, color: new THREE.Color(0.72, 0.84, 0.66), emissive: new THREE.Color(0.07, 0.12, 0.05), emissiveMap: TEX.needles });
   // vier Streifen (Nord/Süd/West/Ost) → weit entfernte Streifen werden ausgeblendet (cullChunks)
-  const stripOf = (x, z) => x > 520 ? 4 : Math.abs(z) >= Math.abs(x) ? (z < 0 ? 0 : 1) : (x < 0 ? 2 : 3);   // 4 = neues Gebiet im Osten
-  const strips = [0, 1, 2, 3, 4].map(() => ({ t: new THREE.InstancedMesh(trunkGeo, treeTrunkMat, TN), l: layerGeos.map(g => new THREE.InstancedMesh(g, leafM, TN)), n: 0 }));
+  const stripOf = (x, z) => x > 1100 ? 5 : x > 520 ? 4 : Math.abs(z) >= Math.abs(x) ? (z < 0 ? 0 : 1) : (x < 0 ? 2 : 3);   // 4 = Osten, 5 = Tal des Militärflugplatzes
+  const strips = [0, 1, 2, 3, 4, 5].map(() => ({ t: new THREE.InstancedMesh(trunkGeo, treeTrunkMat, TN), l: layerGeos.map(g => new THREE.InstancedMesh(g, leafM, TN)), n: 0 }));
   let placed = 0, tries = 0;
   while (placed < TN && tries++ < 40000) {
     const x = srnd(-S + 4, WELT_XE - 4), z = srnd(-S + 4, S - 4), e = window.mapEdge(x, z);   // e: Abstand zum flachen Inneren (Ring ab -8, Berge ab 66)
@@ -2592,6 +2593,8 @@ function weltMilitaer(road) {
     for (let k = -64; k <= 64; k += 16) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k + 64, 64); g.stroke(); g.beginPath(); g.moveTo(k + 64, 0); g.lineTo(k, 64); g.stroke(); }
     const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.encoding = THREE.sRGBEncoding; t.anisotropy = MAX_ANISO; return t;
   })(), alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.45, metalness: 0.7 });
+  const CF = pbr('concrete', 2.7, { mat: { color: new THREE.Color(0.36, 0.37, 0.36), polygonOffset: true, polygonOffsetFactor: -1 } });   // Flugfeld-Beton (dunkler, blendet nicht)
+  const GRN = pbr('grass', 2, { map: tintedTex('grass', 0x557a34), mat: { color: new THREE.Color(1, 1, 1) } });   // sattes Gras (Sportplatz, Erdbunker)
   const HAS_M = pbr('concrete', 4, { mat: { color: new THREE.Color(0.62, 0.64, 0.56), side: THREE.DoubleSide } });
   const YEL = new THREE.MeshStandardMaterial({ color: 0xe0b532, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -2 });
   const RLM = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2c0, emissiveIntensity: 1.2 });
@@ -2649,8 +2652,8 @@ function weltMilitaer(road) {
     tkSign(cx + L / 2 + 1.02, 4.2, cz - R - 2.4, 3.2, 1.6, Math.PI / 2, tkSignMat(n, '#2f3b22', '#ffffff', false));
     for (const s of [-1, 1]) collider(cx, 0, cz + s * (R - 0.8), L, 8, 1.6);
     collider(cx - L / 2 - 0.3, 0, cz, 0.8, 10, 2 * R);
-    decalT(cx, cz, L, 2 * R, MAT.concreteFloor, 2.7, 0, 0.011);
-    decalT((cx + L / 2 + TX - 9) / 2, cz, TX - 9 - (cx + L / 2), 22, MAT.concreteFloor, 2.7, 0, 0.011);   // Zufahrt zum Rollweg
+    decalT(cx, cz, L, 2 * R, CF, 2.7, 0, 0.011);
+    decalT((cx + L / 2 + TX - 9) / 2, cz, TX - 9 - (cx + L / 2), 22, CF, 2.7, 0, 0.011);   // Zufahrt zum Rollweg
     decalT((cx - L / 2 + 4 + TX) / 2, cz, TX - (cx - L / 2 + 4), 0.4, YEL, 0, 0, 0.02);
   };
   const milTruck = (x, z, rot) => {   // Militär-Lkw mit Plane (vorne = +x)
@@ -2686,9 +2689,10 @@ function weltMilitaer(road) {
       addBox(GX, 0, s * 6.6, 0.35, 1.0, 0.35, STRIPE, 0, { round: 0 });
       const ag = boxGeo(0.12, 0.12, 6, 0); ag.translate(0, 0, -s * 3); const arm = new THREE.Mesh(ag, STRIPE); arm.position.set(GX, 1.0, s * 6.6); arm.rotation.x = s * 1.25; scene.add(arm);
     }
-    for (const s of [-1, 1]) addBox(GX - 3, 0, -10.5 + s * 3.6, 0.15, 3.2, 0.15, MAT.metal, 1, { round: 0 });
-    sign(GX - 3, 2.8, -10.5, 7.6, 1.4, -Math.PI / 2, 'MILITÄRFLUGPLATZ KAMPFZONE');
-    sign(GX - 3, 1.7, -10.5, 7.6, 0.55, -Math.PI / 2, 'SPERRGEBIET · Zutritt nur mit Ausweis', '#ffffff', '#c8102e');
+    const SX = X0 - 6;   // Schild vor dem Tor (links der Zufahrt)
+    for (const s of [-1, 1]) addBox(SX, 0, -10.8 + s * 3.6, 0.15, 3.2, 0.15, MAT.metal, 1, { round: 0 });
+    sign(SX - 0.1, 2.8, -10.8, 7.6, 1.4, -Math.PI / 2, 'MILITÄRFLUGPLATZ KAMPFZONE');
+    sign(SX - 0.1, 1.7, -10.8, 7.6, 0.55, -Math.PI / 2, 'SPERRGEBIET · Zutritt nur mit Ausweis', '#ffffff', '#c8102e');
   }
 
   /* --- Straßen auf dem Gelände --- */
@@ -2699,7 +2703,7 @@ function weltMilitaer(road) {
   /* --- Start- und Landebahn 18/36 (600 m × 40 m), Rollweg, Vorfeld --- */
   const RL = RZ1 - RZ0;
   decalT(RX, 0, RW, RL, MAT.road, 3, 0, 0.01);
-  for (const sd of [-1, 1]) decalT(RX + sd * (RW / 2 + 3), 0, 6, RL, MAT.concreteFloor, 2.7, 0, 0.009);   // Schultern
+  for (const sd of [-1, 1]) decalT(RX + sd * (RW / 2 + 3), 0, 6, RL, CF, 2.7, 0, 0.009);   // Schultern
   for (let z = RZ0 + 60; z < RZ1 - 60; z += 30) decalT(RX, z, 0.9, 15, LINE, 0, 0, 0.02);                  // Mittellinie
   for (const sd of [-1, 1]) decalT(RX + sd * (RW / 2 - 1.2), 0, 0.9, RL - 4, LINE, 0, 0, 0.02);            // Randlinien
   for (const tz of [RZ0 + 14, RZ1 - 14]) for (let k = 0; k < 5; k++) for (const sd of [-1, 1]) decalT(RX + sd * (3.5 + k * 3), tz, 1.8, 22, LINE, 0, 0, 0.021);   // Schwellen
@@ -2714,12 +2718,12 @@ function weltMilitaer(road) {
   for (const tz of [RZ0 + 75, RZ1 - 75]) { decalT(RX, tz, RW - 2, 0.25, MAT.dark, 0, 0, 0.023); for (const sd of [-1, 1]) addBox(RX + sd * (RW / 2 + 1.5), 0, tz, 1.2, 0.6, 1.6, YEL, 1, DEC); }   // Fangseil
   for (let z = RZ0 + 5; z <= RZ1 - 5; z += 30) for (const sd of [-1, 1]) addBox(RX + sd * (RW / 2 + 1), 0, z, 0.35, 0.3, 0.35, RLM, 0, DEC);   // Randfeuer
   for (const tz of [RZ0 - 1, RZ1 + 1]) for (let x = RX - RW / 2 + 2; x <= RX + RW / 2 - 2; x += 4) addBox(x, 0, tz, 0.35, 0.3, 0.35, RLG, 0, DEC);   // Schwellenfeuer
-  for (const tz of [RZ0 - 18, RZ1 + 18]) { decalT(RX, tz, RW, 34, MAT.concreteFloor, 2.7, 0, 0.009);   // Vorfeld der Schwelle mit gelben Pfeilen
+  for (const tz of [RZ0 - 18, RZ1 + 18]) { decalT(RX, tz, RW, 34, CF, 2.7, 0, 0.009);   // Vorfeld der Schwelle mit gelben Pfeilen
     for (let k = 0; k < 3; k++) for (const sd of [-1, 1]) { const zz = tz + (tz < 0 ? 1 : -1) * (k * 9 - 9); decalT(RX + sd * 9, zz, 1.2, 20, YEL, 0, sd * (tz < 0 ? -1 : 1) * 1.1, 0.02); } }
   decalT(TX, 0, 18, RL, MAT.road, 3, 0, 0.01); decalT(TX, 0, 0.4, RL, YEL, 0, 0, 0.02);   // Rollweg
   for (const z of [RZ0 + 30, 0, RZ1 - 30]) { decalT((TX + RX - RW / 2) / 2, z, RX - RW / 2 - TX, 18, MAT.road, 3, 0, 0.0095); decalT((TX + RX - RW / 2) / 2, z, RX - RW / 2 - TX, 0.4, YEL, 0, 0, 0.02);
     for (const o of [-0.6, 0.6]) decalT(RX - RW / 2 - 8 + o, z, 0.25, 16, YEL, 0, 0, 0.021); }   // Haltelinie vor der Bahn
-  decalT(1502, 0, 68, 260, MAT.concreteFloor, 2.7, 0, 0.011);   // Vorfeld
+  decalT(1502, 0, 68, 260, CF, 2.7, 0, 0.011);   // Vorfeld
   for (const z of [-100, -35, 35, 100]) { decalT(1505, z, 62, 0.4, YEL, 0, 0, 0.02); decalT(1478, z, 0.4, 9, YEL, 0, 0, 0.02); }
   for (const [n, z] of [['HAS 1', -285], ['HAS 2', -225], ['HAS 3', -165], ['HAS 4', 165], ['HAS 5', 225], ['HAS 6', 285]]) has(1438, z, n);
   // Windsack
@@ -2745,10 +2749,10 @@ function weltMilitaer(road) {
   addBox(1222, 0, 205, 40, 6, 20, MAT.hallMetal, 2.6, NR); addBox(1222, 6, 205, 41, 0.4, 21, MAT.dark, 1, { decor: true, round: 0 });
   sign(1222, 4.6, 194.94, 12, 1.3, Math.PI, 'TRUPPENKÜCHE');
   // Exerzierplatz mit Fahnenmast, Sportplatz mit Toren
-  decalT(1320, 110, 70, 90, MAT.concreteFloor, 2.7, 0, 0.009);
+  decalT(1320, 110, 70, 90, CF, 2.7, 0, 0.009);
   for (const sd of [-1, 1]) { decalT(1320, 110 + sd * 44, 70, 0.3, LINE, 0, 0, 0.02); decalT(1320 + sd * 34, 110, 0.3, 90, LINE, 0, 0, 0.02); }
   flagpole(1318.7, 110, FLAGS[0]);
-  decalT(1320, 230, 70, 46, MAT.grass, 2, 0, 0.012);
+  decalT(1320, 230, 70, 46, GRN, 2, 0, 0.012);
   for (const sd of [-1, 1]) { decalT(1320, 230 + sd * 22, 68, 0.2, LINE, 0, 0, 0.02); decalT(1320 + sd * 34, 230, 0.2, 44, LINE, 0, 0, 0.02);
     for (const o of [-3.6, 3.6]) addBox(1320 + sd * 34, 0, 230 + o, 0.12, 2.4, 0.12, TKM.white, 1, DEC);
     addBox(1320 + sd * 34, 2.4, 230, 0.12, 0.12, 7.32, TKM.white, 1, DEC); }
@@ -2762,12 +2766,12 @@ function weltMilitaer(road) {
     const door = new THREE.Mesh(new THREE.PlaneGeometry(38, 10), MAT.dark); door.position.set(x + w / 2 + 0.03, 5, z); door.rotation.y = Math.PI / 2; scene.add(door);
     for (let k = -4; k <= 4; k++) addBox(x + w / 2 + 0.06, 0, z + k * 4.2, 0.08, 10, 0.12, MAT.metal, 1, DEC);   // Torsegmente
     sign(x + w / 2 + 0.08, 11.5, z, 16, 1.4, Math.PI / 2, 'WARTUNG · STAFFEL 1');
-    decalT(x + w / 2 + 21, z, 42, 40, MAT.concreteFloor, 2.7, 0, 0.011); }
+    decalT(x + w / 2 + 21, z, 42, 40, CF, 2.7, 0, 0.011); }
   // Fahrzeughalle (offener Unterstand) mit Militär-Lkw
   { const x = 1318, z = -40;
     for (let k = -2; k <= 2; k++) for (const s of [-1, 1]) addBox(x + k * 11, 0, z + s * 7.5, 0.35, 5.2, 0.35, MAT.metal, 1, { round: 0 });
     addBox(x, 5.2, z, 46, 0.35, 17, OLIVE_D, 1, { decor: true, round: 0 }); addBox(x, 0, z - 8, 46, 5.2, 0.3, CAMO, 9, NR);
-    decalT(x, z, 46, 17, MAT.concreteFloor, 2.7, 0, 0.011);
+    decalT(x, z, 46, 17, CF, 2.7, 0, 0.011);
     for (let k = 0; k < 4; k++) milTruck(x - 16 + k * 10.5, z - 0.8, -Math.PI / 2);
     sign(x, 4.4, z + 8.4, 10, 1.1, 0, 'FAHRZEUGHALLE'); }
   // Tanklager mit Auffangwall
@@ -2778,7 +2782,7 @@ function weltMilitaer(road) {
   // Munitionsbunker (mit Erde bedeckt), Flak-Stellungen
   for (const x of [1300, 1335, 1370]) {
     const g = new THREE.CylinderGeometry(4.5, 4.5, 12, 12, 1, true, Math.PI / 2, Math.PI); g.rotateX(Math.PI / 2);
-    const mound = new THREE.Mesh(withUv2(g), MAT.grass); mound.position.set(x, 0, 300); mound.castShadow = true; scene.add(mound);
+    const mound = new THREE.Mesh(withUv2(g), GRN); mound.position.set(x, 0, 300); mound.castShadow = true; scene.add(mound);
     addBox(x, 0, 293.7, 9.4, 4.2, 0.6, MAT.concrete, 2.6, NR); addBox(x, 0, 306.3, 9.4, 4.2, 0.6, MAT.concrete, 2.6, NR);
     const dr = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2.6), OLIVE_D); dr.position.set(x, 1.3, 293.38); dr.rotation.y = Math.PI; scene.add(dr);
     collider(x, 0, 300, 9, 4.5, 12);
@@ -2959,7 +2963,7 @@ function weltOstDeko() {
   addBox(772, 2.1, 338, 475, 0.06, 0.06, MAT.metal, 1, { decor: true, round: 0 }); addBox(772, 1.0, 338, 475, 0.06, 0.06, MAT.metal, 1, { decor: true, round: 0 });
   for (let k = 0; k < 12; k++) leafTree(625 + k * 24, 64, 0.9);   // Allee an der Vorfahrt
 }
-const WELT_XE = 1100;   // Ostrand der Karte Welt (x); Westrand bleibt -440
+const WELT_XE = 1760;   // Ostrand der Karte Welt (x); Westrand bleibt -440 (hinter dem Windrad-Berg bei x 1100 liegt das Tal des Militärflugplatzes)
 function buildWeltMap() {
   const S = 440;   // Spielfläche ±440 m: innen das alte Gebiet (±300), dann ein flacher Ring, außen Berge (ab ~380 m)
   // Berge am Rand (begehbar): vier Streifen, Höhe = sichtbares Außengelände (core.js terrainHeight)
@@ -3005,7 +3009,7 @@ function buildWeltMap() {
     if (center === 'solid') alongX ? decalT(cx, cz, L, 0.2, yel, 0, 0, 0.013) : decalT(cx, cz, 0.2, L, yel, 0, 0, 0.013);
   };
   // Bundesstraßen durch die ganze Karte (Leitplanken an den Landstücken)
-  road(-S, 0, XE, 0, 13, 'solid'); road(0, -S, 0, S, 13, 'solid');
+  road(-S, 0, MIL.GATE, 0, 13, 'solid'); road(0, -S, 0, S, 13, 'solid');   // Ost-West-Straße endet am Tor des Militärflugplatzes
   for (let t = -376; t < 376; t += 4) {
     if (Math.abs(t) < 14 || Math.abs(Math.abs(t) - 345) < 8) continue;   // Kreuzungen (Mitte, Ringstraße) frei
     const rural = (x, z) => !(x > 25 && z < -25) && !(x < -25 && z > 25);   // nicht in Stadt/Dorf
@@ -3363,7 +3367,7 @@ function buildWeltMap() {
       MAP_VEHICLES.push({ x, z, yaw: Math.PI / 2, kind: 'heli' });
     }
   }
-  weltF1(road); weltAirport(road);   // vor dem Ring: Strecke frei halten (Bäume)
+  weltF1(road); weltAirport(road); weltMilitaer(road);   // vor dem Ring: Strecke frei halten (Bäume)
   weltRing(road, S);
 
   /* --- Mopeds --- */

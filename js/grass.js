@@ -166,7 +166,7 @@ float grDens(float f) { return f < 0.3 ? 1.0 : 1.0 - (f - 0.3) / 0.7 * 0.75; }
   window.grassGroundAt = groundAt;
 
   /* --- Ganze Karte gleich am Anfang vorbereiten (im Menü, mit Anzeige) → im Spiel muss nichts mehr nachladen --- */
-  const TB = MAP_ID === 'welt' ? [-2, 4, -2, 1] : [-1, 0, -1, 0];   // Kachel-Nummern (je 256 m), Welt: x -512 … 1280, z -512 … 512
+  const TB = MAP_ID === 'welt' ? [-2, 6, -2, 1] : [-1, 0, -1, 0];   // Kachel-Nummern (je 256 m), Welt: x -512 … 1792 (mit Militärflugplatz), z -512 … 512
   const queue = [];
   { const ox = MAP_ID === 'welt' ? 100 : 0;
     for (let tx = TB[0]; tx <= TB[1]; tx++) for (let tz = TB[2]; tz <= TB[3]; tz++) queue.push([tx, tz, Math.hypot((tx + 0.5) * TILE - ox, (tz + 0.5) * TILE)]);
