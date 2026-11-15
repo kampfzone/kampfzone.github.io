@@ -5,8 +5,8 @@ const PREFIX = 'kampfzone-arena-v1-';
 const TOUCH = matchMedia('(pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && matchMedia('(hover: none)').matches);
 if (TOUCH) document.body.classList.add('touch');
 
-/* Update-Prüfung: beim Veröffentlichen wird 20261115-124137 durch eine Versionsnummer ersetzt */
-const BUILD = '20261115-124137';
+/* Update-Prüfung: beim Veröffentlichen wird 20261115-132606 durch eine Versionsnummer ersetzt */
+const BUILD = '20261115-132606';
 // Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
 // Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
 const UPD = { newer: null };
@@ -549,7 +549,25 @@ new THREE.RGBELoader(loadMgr).setDataType(THREE.HalfFloatType).load('textures/sk
   tex.mapping = THREE.EquirectangularReflectionMapping;
   analyzeSky(tex);
   scene.environment = pmrem.fromEquirectangular(tex).texture;
-  scene.background = tex;
+  // Himmel als eigene Kugel um die Kamera: oben das Himmelsfoto, unter dem Horizont sanft in den Dunst übergehend.
+  // (Das Foto zeigt unten ein verschwommenes Spiegelbild mit dunklen Zacken – aus der Luft sah das aus wie Streifen in einem alten Film.)
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(700, 48, 24), new THREE.ShaderMaterial({
+    uniforms: { tSky: { value: tex }, fogCol: { value: scene.fog.color } },
+    vertexShader: 'varying vec3 vDir; void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform sampler2D tSky; uniform vec3 fogCol; varying vec3 vDir;
+      void main() {
+        vec3 d = normalize(vDir);
+        vec2 uv = vec2(atan(d.z, d.x) * 0.1591549 + 0.5, asin(clamp(d.y, -1.0, 1.0)) * 0.3183099 + 0.5);
+        gl_FragColor = vec4(texture2D(tSky, vec2(uv.x, max(uv.y, 0.505))).rgb, 1.0);
+        #include <tonemapping_fragment>
+        #include <encodings_fragment>
+        gl_FragColor.rgb = mix(fogCol, gl_FragColor.rgb, smoothstep(-0.015, 0.06, d.y));
+      }`,
+    side: THREE.BackSide, depthWrite: false, depthTest: false }));
+  sky.renderOrder = -1000; sky.frustumCulled = false; sky.userData.noMerge = true; sky.matrixAutoUpdate = false;
+  sky.onBeforeRender = (r, s, cam) => { sky.position.copy(cam.position); sky.updateMatrix(); sky.updateMatrixWorld(); };
+  scene.add(sky); window.SKY_DOME = sky;
+  scene.background = null;
   skyMesh.visible = false;
 });
 
@@ -773,7 +791,8 @@ function roundedBoxGeo(w, h, d, r, m = 2, tile = 0) {
   };
   const geo = welt ? new THREE.PlaneGeometry(2350, 1000, 470, 200) : new THREE.PlaneGeometry(1000, 1000, 120, 120); geo.rotateX(-Math.PI / 2); if (welt) geo.translate(675, 0, 0);   // Welt: x -500 … 1850
   const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) pos.setY(i, heightAt(pos.getX(i), pos.getZ(i)));
+  // Welt: wo das Gelände flach ist, liegt es deutlich unter der Wiese (y 0) – sonst flimmern beide aus der Ferne streifig ineinander
+  for (let i = 0; i < pos.count; i++) { const h = heightAt(pos.getX(i), pos.getZ(i)); pos.setY(i, welt && h < 0.05 ? -0.6 : h); }
   geo.computeVertexNormals(); withUv2(geo);
   // Natürliche Farbverläufe: sattes Grün, trockene/helle Flecken, dunklere Mulden, Fels an steilen Hängen und weit oben
   { const nor = geo.attributes.normal, col = new Float32Array(pos.count * 3);

@@ -323,6 +323,13 @@ function frame(t) {
   if (gfx === 'perf' || gfx === 'clean') { SHADOW.t -= dt; if (sunMoved || SHADOW.t <= 0) { renderer.shadowMap.needsUpdate = true; SHADOW.t = 0.1; } }
   if (window.waterNormal) { window.waterNormal.offset.x += dt * 0.004; window.waterNormal.offset.y += dt * 0.0025; }
   skyMesh.position.copy(camera.position);
+  // Tiefen-Genauigkeit: im Flugzeug/Heli (Kamera hinter dem Fahrzeug) und im Menü die nahe Schnittebene je nach Höhe weiter weg
+  // → Boden, Straßen und Markierungen flimmern aus der Luft nicht mehr streifig. Zu Fuß bleibt sie bei 5 cm (Waffe in der Hand).
+  { const air = !running || (ride.v >= 0 && (ride.kind === 'plane' || ride.kind === 'heli'));
+    const agl = camera.position.y - Math.max(0, hillH(camera.position.x, camera.position.z));
+    const vd = running ? camera.position.distanceTo(ride.pos) : 99;   // Abstand zum eigenen Fahrzeug (darf nicht abgeschnitten werden)
+    const nr = air ? Math.max(0.05, Math.min(3, agl * 0.04, vd * 0.3)) : 0.05;
+    if (Math.abs(nr - camera.near) > 0.004) { camera.near = nr; camera.updateProjectionMatrix(); } }
   if (window.postRender) postRender(); else renderer.render(scene, camera);   // Kino-Look (postfx.js)
   if (window.recFrame) recFrame();   // Videoaufnahme (record.js)
   fpsTick(t);

@@ -2322,7 +2322,7 @@ function weltRing(road, S) {
     const sp = new THREE.Mesh(new THREE.ConeGeometry(2.6, 5, 4), TKM.roofTile); sp.position.set(cx, 15.5, cz - 7.5); sp.rotation.y = Math.PI / 4; scene.add(sp);
     for (const s of [1, -1]) { const r = new THREE.Mesh(boxGeo(0.15, 4.6, 12.6, 2.5), MAT.roof); r.position.set(cx + s * 1.9, 7.2, cz); r.rotation.z = s * 0.95; scene.add(r); }
     reserve(cx - 6, cz - 11, cx + 6, cz + 8); }
-  const field = hex => pbr('grass', 4, { map: tintedTex('grass', hex), mat: { color: new THREE.Color(1, 1, 1) } });
+  const field = hex => pbr('grass', 4, { map: tintedTex('grass', hex), mat: { color: new THREE.Color(0.74, 0.74, 0.72) } });   // etwas dunkler: blendet aus der Luft nicht weiß
   const crops = [field(0xcfae55), field(0xd9cf3a), field(0x7aa645)];
   for (const [x0, x1] of [[-240, -130], [-110, -20], [90, 200], [215, 300]]) {
     decalT((x0 + x1) / 2, 364, x1 - x0, 24, crops[Math.floor(srand() * 3)], 4, 0, 0.007); reserve(x0, 352, x1, 377);
@@ -2989,7 +2989,7 @@ function buildWeltMap() {
   MAT.road = pbr('asphalt', 3, { mat: { polygonOffset: true, polygonOffsetFactor: -1 } });
   MAT.rampWood = pbr('wood', 2, { mat: { color: new THREE.Color(1.35, 1.2, 1.0) } });
   MAT.dirt = pbr('asphalt', 3, { map: tintedTex('asphalt', 0x6e5034), mat: { color: new THREE.Color(0.68, 0.6, 0.52) }, normalScale: 1.6 });
-  const field = hex => pbr('grass', 4, { map: tintedTex('grass', hex), mat: { color: new THREE.Color(1, 1, 1) } });
+  const field = hex => pbr('grass', 4, { map: tintedTex('grass', hex), mat: { color: new THREE.Color(0.74, 0.74, 0.72) } });   // etwas dunkler: blendet aus der Luft nicht weiß
   const F_WHEAT = field(0xcfae55), F_GREEN = field(0x7aa645), F_PLOW = field(0x6a4a30), F_RAPE = field(0xd9cf3a);
 
   /* --- Rand: Hecke + unsichtbare Wand --- */
@@ -3471,12 +3471,14 @@ window.cullChunks = dt => {
   if (!CHUNK) return;
   cullT -= dt; if (cullT > 0) return; cullT = 0.2;
   const c = camera.position;
+  // Im Flugzeug/Heli: Kartenstücke erst ganz im Dunst ein-/ausblenden (sonst „ploppen“ Häuser beim schnellen Fliegen sichtbar auf)
+  const fly = typeof ride !== 'undefined' && ride.v >= 0 && (ride.kind === 'plane' || ride.kind === 'heli'), CD = fly ? Math.max(CULL_DIST, scene.fog.far) : CULL_DIST;
   for (const g of window.SHOP_DISPLAYS || []) g.visible = Math.hypot(g.userData.c[0] - c.x, g.userData.c[1] - c.z) < 70;   // Waffen im Laden nur in der Nähe zeichnen
   for (const g of FAR_GROUPS) {
     const dx = Math.max(g.r[0] - c.x, 0, c.x - g.r[2]), dz = Math.max(g.r[1] - c.z, 0, c.z - g.r[3]);
-    g.o.visible = Math.hypot(dx, dz) < CULL_DIST + 70 && (g.o !== window.grassI || !gfxLow()) && !(g.o.userData.foliage && gfxClean());
+    g.o.visible = Math.hypot(dx, dz) < CD + 70 && (g.o !== window.grassI || !gfxLow()) && !(g.o.userData.foliage && gfxClean());
   }
-  for (const m of mapMeshes) { const s = m.userData.cull; if (s) m.visible = c.distanceTo(s.center) - s.radius < CULL_DIST && !(m.userData.foliage && gfxClean()); }
+  for (const m of mapMeshes) { const s = m.userData.cull; if (s) m.visible = c.distanceTo(s.center) - s.radius < CD && !(m.userData.foliage && gfxClean()); }
 };
 
 /* „Sehr niedrig“ für schwache PCs: einfache Licht-Berechnung (Lambert statt PBR), halbe Auflösung, kurze Sichtweite.
