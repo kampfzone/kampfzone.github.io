@@ -2561,7 +2561,7 @@ function weltAirport(road) {
   MAP_VEHICLES.push({ x: 895, z: 140, yaw: -Math.PI / 2, kind: 'plane' }, { x: 918, z: 140, yaw: -Math.PI / 2, kind: 'plane' },
     { x: 905, z: 178, yaw: -Math.PI / 2, kind: 'plane' }, { x: 995, z: RZ + 8, yaw: Math.PI, kind: 'plane' });
   // Zwei Kampfjets startbereit am Ostende der Bahn (Start nach Westen, 485 m Bahn reichen bei Vollgas locker)
-  MAP_VEHICLES.push({ x: 972, z: RZ - 12, yaw: Math.PI, kind: 'plane', ctype: 'jet' }, { x: 945, z: RZ + 14, yaw: Math.PI, kind: 'plane', ctype: 'jet' });
+  MAP_VEHICLES.push({ x: 972, z: RZ - 12, yaw: Math.PI, kind: 'plane', ctype: 'jet', jt: 2 }, { x: 945, z: RZ + 14, yaw: Math.PI, kind: 'plane', ctype: 'jet', jt: 0 });   // jt: Jet-Typ (0 Falke, 1 Adler, 2 Milan, 3 Schatten)
   (window.MAP_POIS = window.MAP_POIS || []).push({ x: 960, z: RZ, t: '🛩' });
 }
 /* ======================= Militärflugplatz (neues Tal ganz im Osten der Karte „Welt“, hinter dem Windrad-Bergrücken) =======================
@@ -2815,9 +2815,9 @@ function weltMilitaer(road) {
 
   /* --- Fliegbare Kampfjets: zwei startbereit an der Südschwelle (Start nach Norden), zwei auf dem Vorfeld, einer im Bunker --- */
   MAP_VEHICLES.push(
-    { x: RX - 9, z: RZ1 - 32, yaw: Math.PI / 2, kind: 'plane', ctype: 'jet' }, { x: RX + 9, z: RZ1 - 52, yaw: Math.PI / 2, kind: 'plane', ctype: 'jet' },
-    { x: 1500, z: -68, yaw: 0, kind: 'plane', ctype: 'jet' }, { x: 1500, z: 68, yaw: 0, kind: 'plane', ctype: 'jet' },
-    { x: 1436, z: -225, yaw: 0, kind: 'plane', ctype: 'jet' },
+    { x: RX - 9, z: RZ1 - 32, yaw: Math.PI / 2, kind: 'plane', ctype: 'jet', jt: 0 }, { x: RX + 9, z: RZ1 - 52, yaw: Math.PI / 2, kind: 'plane', ctype: 'jet', jt: 2 },
+    { x: 1500, z: -68, yaw: 0, kind: 'plane', ctype: 'jet', jt: 3 }, { x: 1500, z: 68, yaw: 0, kind: 'plane', ctype: 'jet', jt: 1 },
+    { x: 1436, z: -225, yaw: 0, kind: 'plane', ctype: 'jet', jt: 3 },
     { x: 1300, z: -18, yaw: -Math.PI / 2, kind: 'tank' }, { x: 1336, z: -18, yaw: -Math.PI / 2, kind: 'tank' });
   window.MAP_STREETS.push([MIL.GATE - 4, -4.5, 1468, 4.5], [1256, Z0 + 30, 1264, Z1 - 30], [RX - RW / 2, RZ0, RX + RW / 2, RZ1], [TX - 9, RZ0, TX + 9, RZ1],
     [1468, -130, 1536, 130], ...[RZ0 + 30, 0, RZ1 - 30].map(z => [TX, z - 9, RX - RW / 2, z + 9]), ...[-285, -225, -165, 165, 225, 285].map(z => [1424, z - 11, TX - 9, z + 11]));

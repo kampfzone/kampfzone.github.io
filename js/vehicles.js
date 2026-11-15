@@ -375,65 +375,193 @@ function makePlane(i) {
   const dummy = new THREE.Group();
   return { root, spinners: [], fronts: [], prop, steer: dummy, stand: dummy, wf: dummy, wr: dummy, plane: true };
 }
-/* ---------- Kampfjet (moderner Mehrzweck-Jäger, vorne = +x, ~17 m lang, 11 m Spannweite) ----------
-   Spitze Radarnase, goldene Kanzel, seitliche Lufteinläufe, gepfeilte Flügel, Doppel-Seitenleitwerk,
-   zwei Triebwerke mit Nachbrennerflamme (wird mit dem Schub länger), Raketen unter den Flügeln */
-const JET_COLS = [[0x7d858f, 0x5c636c], [0x5f6b78, 0x434c56]];
+/* ---------- Kampfjets: vier Typen mit glattem Rumpf, Profil-Flügeln, Bubble-Kanzel und Lackierung (vorne = +x) ----------
+   Rumpf = Querschnitte (Superellipse) entlang der Länge, Flügel/Leitwerke = echtes Tragflächenprofil (vorne dick, hinten dünn),
+   Lackierung = Bild mit Tarnfarben-Verlauf (oben dunkler), Blechfugen, Nieten, Wartungsklappen, Abgasruß, Abzeichen, Kennnummer.
+   Falke: leichter Einstrahler, ein Seitenleitwerk, Lufteinlauf unter dem Rumpf · Adler: großer Zweistrahler, zwei Seitenleitwerke
+   Milan: Deltaflügel mit Canards · Schatten: Tarnkappen-Jet, kantiger Rumpf, schräge Leitwerke, eckige Düsen.
+   Alle fliegen gleich (gleiche Steuerung), sehen aber verschieden aus. */
 const JET_GLASS = new THREE.MeshStandardMaterial({ color: 0xb08a3a, roughness: 0.08, metalness: 0.9, envMapIntensity: 1.6 });   // goldbedampfte Kanzel
+const JET_GLASS_CLEAR = new THREE.MeshStandardMaterial({ color: 0x23323e, roughness: 0.04, metalness: 0.7, envMapIntensity: 1.8 });   // getönte Kanzel
 const JET_FLAME = new THREE.MeshBasicMaterial({ color: 0xff9a40, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
 const JET_FLAME_IN = new THREE.MeshBasicMaterial({ color: 0x9fd0ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
-function makeJet(i) {
-  const [c0, c1] = JET_COLS[i % JET_COLS.length];
-  const G = new THREE.MeshStandardMaterial({ color: c0, roughness: 0.55, metalness: 0.35 }), Gd = new THREE.MeshStandardMaterial({ color: c1, roughness: 0.6, metalness: 0.3 });
-  const D = HELI_MAT.dark, Wm = PLANE_WHITE, Y = new THREE.MeshStandardMaterial({ color: 0xe0b532, roughness: 0.6 });
-  const root = new THREE.Group(); root.rotation.order = 'YXZ';
-  const alongX = (geo, mat, x, y, z, sign = -1) => ({ geo, mat, p: [x, y, z], r: [0, 0, sign * Math.PI / 2] });   // Zylinder/Kegel entlang x (Spitze nach +x)
-  // Grundriss [x, z] als flache Platte (Flügel, Höhenleitwerk); mirror = linke Seite
-  const plan = (pts, y, th, mat, mirror) => {
-    const s = new THREE.Shape(); pts.forEach((p, k) => { const zz = mirror ? -p[1] : p[1]; if (k) s.lineTo(p[0], zz); else s.moveTo(p[0], zz); });
-    const g = new THREE.ExtrudeGeometry(s, { depth: th, bevelEnabled: true, bevelThickness: th * 0.3, bevelSize: th * 0.25, bevelSegments: 1 });
-    g.rotateX(Math.PI / 2); g.translate(0, y + th / 2, 0); return { geo: g, mat, p: [0, 0, 0], r: [0, 0, 0] };
-  };
-  const fin = (pts, th, mat, z, cant) => {   // Seitenleitwerk: Umriss [x, y], nach außen geneigt
-    const s = new THREE.Shape(); pts.forEach((p, k) => k ? s.lineTo(p[0], p[1]) : s.moveTo(p[0], p[1]));
-    const g = new THREE.ExtrudeGeometry(s, { depth: th, bevelEnabled: true, bevelThickness: th * 0.3, bevelSize: th * 0.25, bevelSegments: 1 }); g.translate(0, 0, -th / 2);
-    return { geo: g, mat, p: [0, 2.15, z], r: [cant, 0, 0] };
-  };
-  const body = [
-    alongX(new THREE.ConeGeometry(0.62, 3.4, 18), Gd, 7.0, 1.75, 0),                                   // Radarnase
-    alongX(new THREE.CylinderGeometry(0.62, 0.86, 4.2, 18), G, 3.2, 1.75, 0),                          // vorderer Rumpf
-    B(7.6, 1.25, 2.3, G, -2.4, 1.7, 0), B(4.6, 0.5, 1.0, G, 0.4, 2.42, 0),                              // Mittel-/Hinterrumpf, Rücken
-    SPH(1, JET_GLASS, 3.65, 2.42, 0, 1.75, 0.56, 0.56), B(0.25, 0.5, 0.9, D, 2.0, 2.45, 0),            // Kanzel, Kanzelrahmen hinten
-    B(2.6, 1.0, 0.8, G, 1.2, 1.45, 1.25), B(2.6, 1.0, 0.8, G, 1.2, 1.45, -1.25),                        // Lufteinläufe
-    B(0.06, 0.85, 0.65, D, 2.52, 1.45, 1.25), B(0.06, 0.85, 0.65, D, 2.52, 1.45, -1.25),
-    plan([[1.6, 1.05], [-3.6, 5.4], [-4.6, 5.4], [-4.4, 1.05]], 1.52, 0.16, G), plan([[1.6, 1.05], [-3.6, 5.4], [-4.6, 5.4], [-4.4, 1.05]], 1.52, 0.16, G, true),   // Flügel
-    plan([[3.4, 0.62], [1.6, 1.3], [0.4, 1.15], [0.4, 0.62]], 1.62, 0.1, G), plan([[3.4, 0.62], [1.6, 1.3], [0.4, 1.15], [0.4, 0.62]], 1.62, 0.1, G, true),          // Vorflügel-Wurzel
-    plan([[-5.2, 1.0], [-7.2, 3.3], [-7.9, 3.3], [-7.6, 1.0]], 1.58, 0.12, Gd), plan([[-5.2, 1.0], [-7.2, 3.3], [-7.9, 3.3], [-7.6, 1.0]], 1.58, 0.12, Gd, true),     // Höhenleitwerk
-    fin([[-4.4, 0], [-6.6, 2.9], [-7.4, 2.9], [-7.5, 0]], 0.14, Gd, 1.05, 0.3), fin([[-4.4, 0], [-6.6, 2.9], [-7.4, 2.9], [-7.5, 0]], 0.14, Gd, -1.05, -0.3),         // Doppel-Seitenleitwerk
-    B(1.0, 0.35, 0.16, Y, -6.9, 4.7, 1.82, 0.3, 0, 0), B(1.0, 0.35, 0.16, Y, -6.9, 4.7, -1.82, -0.3, 0, 0),                                                          // gelbe Leitwerk-Spitzen
-    alongX(new THREE.CylinderGeometry(0.55, 0.62, 1.3, 16), D, -6.7, 1.65, 0.62), alongX(new THREE.CylinderGeometry(0.55, 0.62, 1.3, 16), D, -6.7, 1.65, -0.62),     // Schubdüsen
-    alongX(new THREE.CylinderGeometry(0.44, 0.44, 0.05, 14), JET_FLAME, -7.36, 1.65, 0.62), alongX(new THREE.CylinderGeometry(0.44, 0.44, 0.05, 14), JET_FLAME, -7.36, 1.65, -0.62),   // Glühen in der Düse
-    // Fahrwerk: Bugrad, Hauptfahrwerk
-    CY(0.07, 1.25, D, 5.6, 0.85, 0), { geo: new THREE.CylinderGeometry(0.3, 0.3, 0.22, 14), mat: TIRE, p: [5.6, 0.3, 0], r: [Math.PI / 2, 0, 0] },
-  ];
-  for (const s of [-1, 1]) {
-    body.push(CY(0.09, 1.15, D, -1.2, 0.85, s * 1.45), { geo: new THREE.CylinderGeometry(0.38, 0.38, 0.28, 14), mat: TIRE, p: [-1.2, 0.38, s * 1.5], r: [Math.PI / 2, 0, 0] });
-    for (const zz of [2.7, 4.0]) {   // Luft-Luft-Raketen an Pylonen
-      body.push(B(1.2, 0.22, 0.1, Gd, -1.0, 1.3, s * zz), alongX(new THREE.CylinderGeometry(0.11, 0.11, 2.8, 10), Wm, -1.1, 1.08, s * zz), alongX(new THREE.ConeGeometry(0.11, 0.4, 10), D, 0.5, 1.08, s * zz),
-        B(0.4, 0.5, 0.03, Wm, -2.35, 1.08, s * zz), B(0.4, 0.03, 0.5, Wm, -2.35, 1.08, s * zz));
-    }
+const JET_NOZ = new THREE.MeshStandardMaterial({ color: 0x5a5550, roughness: 0.45, metalness: 0.85 });     // Schubdüse (hitzeverfärbtes Metall)
+const JET_INNER = new THREE.MeshStandardMaterial({ color: 0x0c0c0e, roughness: 0.9 });                      // Einlauf/Düse innen
+const JET_GEAR = new THREE.MeshStandardMaterial({ color: 0xd9dbd6, roughness: 0.5, metalness: 0.3 });       // Fahrwerk (weiß lackiert)
+const JET_TYPES = [
+  { name: 'Falke', base: '#8f98a1', top: '#7a838c', low: '#aab2b9', L: 16.6, circ: 4.2 },
+  { name: 'Adler', base: '#6f7c88', top: '#5b6874', low: '#8995a0', L: 18.6, circ: 5.6 },
+  { name: 'Milan', base: '#858d94', top: '#717a81', low: '#a0a8ae', L: 15.8, circ: 4.4 },
+  { name: 'Schatten', base: '#50555a', top: '#464a4f', low: '#5d6267', L: 18.2, circ: 5.8 },
+];
+// Rumpf aus Querschnitten: st = [x, halbe Breite, Höhe oben, Höhe unten, Mitte y, Eckigkeit (2 = rund, 4+ = kantig)]
+// Bild-Koordinaten: u entlang der Länge (Nase = 1), v rundherum (0 unten, .25 rechts, .5 oben, .75 links)
+function jetLoft(st, seg = 32) {
+  const pos = [], uv = [], idx = [], x0 = st[st.length - 1][0], x1 = st[0][0];
+  for (const [x, a, bt, bb, yc, n = 2.2] of st) for (let k = 0; k <= seg; k++) {
+    const t = k / seg * Math.PI * 2 - Math.PI / 2, c = Math.cos(t), s = Math.sin(t), e = 2 / n;
+    pos.push(x, yc + (s >= 0 ? bt : bb) * Math.sign(s) * Math.pow(Math.abs(s), e), a * Math.sign(c) * Math.pow(Math.abs(c), e));
+    uv.push((x - x0) / (x1 - x0), k / seg);
   }
-  root.add(partsToGroup(body, true));
-  // Nachbrenner: zwei Flammen hinter den Düsen (Länge = Schub)
-  const burner = new THREE.Group(); burner.position.set(-7.4, 1.65, 0);
-  for (const z of [0.62, -0.62]) {
-    const f = new THREE.Mesh(new THREE.ConeGeometry(0.45, 3, 14, 1, true), JET_FLAME); f.rotation.z = Math.PI / 2; f.position.set(-1.5, 0, z); f.userData.noShadow = true; burner.add(f);
+  for (let i = 0; i < st.length - 1; i++) for (let k = 0; k < seg; k++) { const a = i * (seg + 1) + k, b = a + seg + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+  const mid = Math.floor(st.length / 2) * (seg + 1) + Math.floor(seg / 4);   // Punkt rechts in der Mitte: Fläche muss nach außen (+z) zeigen
+  return jetGeo(pos, uv, idx, mid, [0, 0, 1]);
+}
+// Dreiecke so drehen, dass die Fläche bei Punkt p nach „out“ zeigt; Normalen weich
+function jetGeo(pos, uv, idx, p, out) {
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+  g.computeVertexNormals();
+  const nr = g.attributes.normal; if (nr.getX(p) * out[0] + nr.getY(p) * out[1] + nr.getZ(p) * out[2] < 0) {
+    for (let j = 0; j < idx.length; j += 3) { const t = idx[j + 1]; idx[j + 1] = idx[j + 2]; idx[j + 2] = t; }
+    g.setIndex(idx); g.computeVertexNormals();
+  }
+  return withUv2(g);
+}
+// Flügel mit NACA-Profil zwischen Wurzel und Spitze: { z, le (Vorderkante x), te (Hinterkante x), y, t (relative Dicke) }
+function jetWing(root, tip, N = 12) {
+  const xs = []; for (let k = 0; k <= N; k++) xs.push((1 - Math.cos(k / N * Math.PI)) / 2);
+  const yt = x => 5 * (0.2969 * Math.sqrt(x) - 0.126 * x - 0.3516 * x * x + 0.2843 * x * x * x - 0.1036 * x * x * x * x);
+  const pos = [], uv = [], idx = [], loop = [];
+  for (let k = N; k >= 0; k--) loop.push([xs[k], 1]); for (let k = 1; k <= N; k++) loop.push([xs[k], -1]);   // oben: Hinterkante → Vorderkante, unten zurück
+  const xmin = Math.min(root.te, tip.te), xmax = Math.max(root.le, tip.le);
+  for (const S of [root, tip]) { const c = S.le - S.te;
+    for (const [xc, sg] of loop) { const x = S.le - xc * c; pos.push(x, S.y + sg * S.t * c * yt(xc) * 0.5, S.z); uv.push((x - xmin) / (xmax - xmin), S === root ? 0 : 1); } }
+  const M = loop.length;
+  for (let k = 0; k < M - 1; k++) idx.push(k, k + M, k + 1, k + M, k + M + 1, k + 1);
+  const ct = pos.length / 3; pos.push((tip.le + tip.te) / 2, tip.y, tip.z); uv.push(0.5, 1);   // Spitze schließen
+  for (let k = 0; k < M - 1; k++) idx.push(M + k, ct, M + k + 1);
+  return jetGeo(pos, uv, idx, Math.floor(N / 2), [0, 1, 0]);   // Punkt N = Vorderkante oben → nach oben
+}
+function jetMirror(g) {   // Spiegelbild für die linke Seite (Dreiecke umdrehen)
+  const m = g.clone(); m.applyMatrix4(new THREE.Matrix4().makeScale(1, 1, -1));
+  const ix = m.index.array.slice(); for (let j = 0; j < ix.length; j += 3) { const t = ix[j + 1]; ix[j + 1] = ix[j + 2]; ix[j + 2] = t; }
+  m.setIndex(Array.from(ix)); m.computeVertexNormals(); return withUv2(m);
+}
+// Seitenleitwerk: Profil in der Ebene, dann aufrecht gestellt, um „cant“ nach außen geneigt, an (z, y)
+function jetFin(rootLe, rootTe, tipLe, tipTe, h, t, z, y, cant) {
+  const g = jetWing({ z: 0, le: rootLe, te: rootTe, y: 0, t }, { z: h, le: tipLe, te: tipTe, y: 0, t: t * 0.8 });
+  g.rotateX(-Math.PI / 2); g.rotateX(cant); g.translate(0, y, z); return g;
+}
+// Lackierung (für alle Jets eines Typs gleich, Kennnummer je Jet)
+const JET_WING_TEX = {};
+function jetBodyTex(ti, num) {
+  const T = JET_TYPES[ti], W = 1024, H = 256, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, H);   // Bild-y = (1 - v) · H: unten hell, oben dunkel (Tarnanstrich gegen Schatten)
+  gr.addColorStop(0, T.low); gr.addColorStop(0.25, T.base); gr.addColorStop(0.5, T.top); gr.addColorStop(0.75, T.base); gr.addColorStop(1, T.low);
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 60; i++) { const x = Math.random() * W, y = Math.random() * H, r = 20 + Math.random() * 70, q = g.createRadialGradient(x, y, 0, x, y, r); q.addColorStop(0, `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,255,255'},.05)`); q.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = q; g.fillRect(x - r, y - r, 2 * r, 2 * r); }
+  const stealth = ti === 3;
+  g.strokeStyle = 'rgba(20,24,28,.35)'; g.lineWidth = 1.2;
+  for (const v of [0.12, 0.2, 0.36, 0.44, 0.56, 0.64, 0.8, 0.88]) { g.beginPath(); g.moveTo(0, (1 - v) * H); g.lineTo(W, (1 - v) * H); g.stroke(); }   // Längsfugen
+  for (let k = 0; k < 16; k++) { const x = 40 + k * 60 + Math.random() * 20; g.beginPath();   // Spante (Querfugen), bei „Schatten“ als Sägezahn
+    if (stealth) { for (let y = 0; y <= H; y += 16) g.lineTo(x + ((y / 16) % 2 ? 8 : -8), y); } else { g.moveTo(x, 0); g.lineTo(x, H); } g.stroke(); }
+  for (let k = 0; k < 26; k++) { const x = Math.random() * W, y = Math.random() * H, w = 14 + Math.random() * 40, h = 8 + Math.random() * 22; g.strokeRect(x, y, w, h); }   // Wartungsklappen
+  g.fillStyle = 'rgba(230,235,240,.25)'; for (let k = 0; k < 1400; k++) g.fillRect(Math.random() * W, Math.random() * H, 1.3, 1.3);   // Nieten
+  if (stealth) { g.fillStyle = 'rgba(140,150,160,.12)'; for (let k = 0; k < 18; k++) g.fillRect(Math.random() * W, Math.random() * H, 30 + Math.random() * 60, 6 + Math.random() * 14); }   // Tarnbeschichtung (Flicken)
+  const soot = g.createLinearGradient(0, 0, W * 0.16, 0); soot.addColorStop(0, 'rgba(25,22,20,.75)'); soot.addColorStop(1, 'rgba(25,22,20,0)'); g.fillStyle = soot; g.fillRect(0, 0, W * 0.16, H);   // Abgasruß hinten
+  // Abzeichen (unauffällig grau) und Kennnummer auf beiden Seiten, lesbar; Schrift wird wegen der Abbildung in der Breite gestreckt
+  const sx = (W / T.L) / (H / T.circ), side = (fn, u, v) => { g.save(); g.translate(u * W, (1 - v) * H); if (v > 0.5) g.rotate(Math.PI); g.scale(sx, 1); fn(); g.restore(); };
+  const roundel = () => { g.fillStyle = 'rgba(40,46,52,.55)'; g.beginPath(); g.arc(0, 0, 15, 0, 7); g.fill(); g.fillStyle = 'rgba(200,206,212,.6)'; g.beginPath();
+    for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? 4.5 : 11; g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } g.fill(); };
+  const text = () => { g.fillStyle = 'rgba(30,34,40,.75)'; g.font = 'bold 20px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(num, 0, 0); };
+  for (const v of [0.27, 0.73]) { side(roundel, 0.33, v); side(text, 0.76, v - 0.03 * (v > 0.5 ? -1 : 1)); }
+  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = MAX_ANISO; return t;
+}
+function jetWingTex(ti) {
+  if (JET_WING_TEX[ti]) return JET_WING_TEX[ti];
+  const T = JET_TYPES[ti], S = 256, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d');
+  g.fillStyle = T.top; g.fillRect(0, 0, S, S);   // u = Profiltiefe (Vorderkante = 1 → rechts), v = Spannweite (Wurzel unten)
+  g.strokeStyle = 'rgba(20,24,28,.16)'; g.lineWidth = 1;
+  for (let k = 1; k < 4; k++) { g.beginPath(); g.moveTo(0, k * S / 4); g.lineTo(S, k * S / 4); g.stroke(); }
+  for (const u of [0.2, 0.55]) { g.beginPath(); g.moveTo(u * S, 0); g.lineTo(u * S, S); g.stroke(); }
+  g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, 0, S * 0.2, S);   // Ruder/Klappen
+  g.fillStyle = 'rgba(60,64,68,.5)'; g.fillRect(S * 0.94, 0, S * 0.06, S);   // Vorderkante
+  g.fillStyle = 'rgba(230,235,240,.22)'; for (let k = 0; k < 500; k++) g.fillRect(Math.random() * S, Math.random() * S, 1.2, 1.2);
+  g.save(); g.translate(S * 0.5, S * 0.42); g.fillStyle = 'rgba(40,46,52,.5)'; g.beginPath(); g.arc(0, 0, 22, 0, 7); g.fill();   // Abzeichen
+  g.fillStyle = 'rgba(200,206,212,.55)'; g.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? 7 : 17; g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } g.fill(); g.restore();
+  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = MAX_ANISO; return JET_WING_TEX[ti] = t;
+}
+function makeJet(i, jt) {
+  const ti = ((jt !== undefined ? jt : i) % 4 + 4) % 4, T = JET_TYPES[ti];
+  const body = new THREE.MeshStandardMaterial({ map: jetBodyTex(ti, 'KZ-' + (100 + (i * 37) % 900)), roughness: 0.55, metalness: 0.3, envMapIntensity: 0.9, side: THREE.DoubleSide });
+  const wingM = new THREE.MeshStandardMaterial({ map: jetWingTex(ti), roughness: 0.58, metalness: 0.28, envMapIntensity: 0.9, side: THREE.DoubleSide });
+  const D = HELI_MAT.dark, Wm = PLANE_WHITE, glass = ti === 0 ? JET_GLASS_CLEAR : JET_GLASS;
+  const root = new THREE.Group(); root.rotation.order = 'YXZ';
+  const P = (geo, mat) => ({ geo, mat, p: [0, 0, 0], r: [0, 0, 0] });
+  const parts = [], wingPair = (r, t) => { const g = jetWing(r, t); parts.push(P(g, wingM), P(jetMirror(g), wingM)); };
+  const finPair = (a, b, c, d, h, th, z, y, cant) => { const g = jetFin(a, b, c, d, h, th, z, y, cant); parts.push(P(g, wingM), P(jetMirror(g), wingM)); };
+  const alongX = (geo, mat, x, y, z) => ({ geo, mat, p: [x, y, z], r: [0, 0, -Math.PI / 2] });   // Zylinder/Kegel entlang x (Spitze nach +x)
+  const nozzle = (x, y, z, r, len) => parts.push(alongX(new THREE.CylinderGeometry(r * 0.92, r, len, 20, 1, true), JET_NOZ, x, y, z), alongX(new THREE.CylinderGeometry(r * 0.88, r * 0.88, 0.05, 20), JET_INNER, x - len / 2 + 0.3, y, z),
+    alongX(new THREE.CylinderGeometry(r * 0.75, r * 0.75, 0.04, 16), JET_FLAME, x - len / 2 + 0.32, y, z));
+  const missile = (x, y, z, len = 2.9) => parts.push(B(1.1, 0.2, 0.08, wingM, x, y + 0.2, z), alongX(new THREE.CylinderGeometry(0.1, 0.1, len, 12), Wm, x - 0.1, y, z), alongX(new THREE.ConeGeometry(0.1, 0.38, 12), D, x - 0.1 + len / 2 + 0.19, y, z),
+    B(0.36, 0.42, 0.02, Wm, x - 0.1 - len / 2 + 0.25, y, z), B(0.36, 0.02, 0.42, Wm, x - 0.1 - len / 2 + 0.25, y, z));
+  const gear = (x, z, h, r, w) => parts.push(CY(0.07, h, JET_GEAR, x, h / 2 + r * 0.6, z), { geo: new THREE.CylinderGeometry(r, r, w, 16), mat: TIRE, p: [x, r, z], r: [Math.PI / 2, 0, 0] },
+    ...(z ? [B(0.7, 0.4, 0.02, wingM, x, h * 0.62, z + (z > 0 ? 0.3 : -0.3))] : []));   // Strebe, Rad, Fahrwerksklappe (nur Hauptfahrwerk)
+  let burnX, burnY, burnZ;
+  if (ti === 0) {   // FALKE: schlanker Einstrahler, großer Lufteinlauf unter dem Rumpf, Flügel-Rumpf-Übergang, ein Seitenleitwerk
+    parts.push(P(jetLoft([[8.4, 0.02, 0.02, 0.02, 1.86, 2], [7.8, 0.24, 0.24, 0.22, 1.84, 2], [6.8, 0.42, 0.42, 0.38, 1.82, 2.1], [5.6, 0.56, 0.52, 0.5, 1.8, 2.3], [4.2, 0.64, 0.6, 0.58, 1.8, 2.4],
+      [2.8, 0.74, 0.6, 0.62, 1.78, 2.6], [1.0, 0.86, 0.6, 0.66, 1.76, 2.9], [-1.5, 0.86, 0.6, 0.64, 1.76, 2.9], [-4.0, 0.74, 0.56, 0.6, 1.78, 2.5], [-6.0, 0.6, 0.52, 0.52, 1.8, 2.2], [-6.9, 0.56, 0.5, 0.5, 1.8, 2.1]]), body));
+    parts.push(P(jetLoft([[3.4, 0.5, 0.2, 0.34, 1.12, 4], [2.4, 0.56, 0.26, 0.38, 1.14, 3.6], [0.0, 0.56, 0.3, 0.36, 1.18, 3.2], [-2.4, 0.4, 0.3, 0.2, 1.3, 2.6]]), body));   // Einlaufkanal
+    parts.push({ geo: new THREE.PlaneGeometry(0.98, 0.62), mat: JET_INNER, p: [3.41, 1.06, 0], r: [0, Math.PI / 2, 0] });                                                            // Einlauföffnung
+    parts.push(P(jetLoft([[6.1, 0.03, 0.03, 0.02, 2.2, 2], [5.5, 0.34, 0.3, 0.02, 2.24, 2], [4.4, 0.44, 0.48, 0.02, 2.24, 2], [3.2, 0.4, 0.4, 0.02, 2.22, 2], [2.2, 0.2, 0.14, 0.02, 2.24, 2]].map(c => [c[0], c[1] * 1.15, c[2], c[3], c[4], c[5]])), glass));   // Kanzel
+    wingPair({ z: 0.6, le: 4.6, te: 0.2, y: 1.72, t: 0.03 }, { z: 1.4, le: 0.9, te: 0.1, y: 1.72, t: 0.04 });          // Strake (Übergang vorn)
+    wingPair({ z: 0.8, le: 1.3, te: -2.7, y: 1.68, t: 0.05 }, { z: 4.6, le: -1.6, te: -2.9, y: 1.68, t: 0.04 });         // Flügel
+    wingPair({ z: 0.6, le: -4.4, te: -6.9, y: 1.62, t: 0.05 }, { z: 2.9, le: -6.1, te: -7.4, y: 1.52, t: 0.04 });        // Höhenleitwerk
+    parts.push(P(jetFin(-3.4, -6.6, -5.9, -7.15, 2.7, 0.06, 0, 2.2, 0), wingM));                                          // Seitenleitwerk
+    finPair(-4.2, -5.8, -4.9, -6.0, 0.7, 0.05, 0.45, 1.25, Math.PI + 0.45);                                                // Bauchflossen
+    nozzle(-7.35, 1.8, 0, 0.55, 1.0); burnX = -7.9; burnY = 1.8; burnZ = [0];
+    for (const s of [-1, 1]) { missile(-2.5, 1.62, s * 4.75, 2.6); missile(-1.6, 1.32, s * 3.2); }                        // Spitzen- und Flügelraketen
+    parts.push(alongX(new THREE.CylinderGeometry(0.34, 0.34, 3.4, 16), wingM, -0.6, 0.85, 0), alongX(new THREE.ConeGeometry(0.34, 0.8, 16), wingM, 1.5, 0.85, 0));   // Zusatztank
+    gear(5.0, 0, 1.0, 0.24, 0.16); for (const s of [-1, 1]) gear(-1.0, s * 1.15, 1.05, 0.36, 0.24);
+  } else if (ti === 1) {   // ADLER: breiter Zweistrahler, kastenförmige Seiteneinläufe, zwei Seitenleitwerke
+    parts.push(P(jetLoft([[9.4, 0.02, 0.02, 0.02, 1.9, 2], [8.6, 0.32, 0.3, 0.28, 1.88, 2], [7.4, 0.52, 0.5, 0.46, 1.86, 2.1], [5.8, 0.66, 0.62, 0.56, 1.84, 2.3], [4.2, 0.74, 0.66, 0.6, 1.84, 2.4],
+      [2.6, 0.9, 0.64, 0.6, 1.82, 2.8], [0.6, 1.5, 0.6, 0.5, 1.8, 3.6], [-2.4, 1.6, 0.56, 0.5, 1.8, 3.8], [-5.0, 1.45, 0.52, 0.5, 1.82, 3.4], [-7.0, 1.3, 0.5, 0.48, 1.82, 3], [-7.6, 1.25, 0.48, 0.46, 1.82, 3]]), body));
+    for (const s of [-1, 1]) { parts.push(P(jetLoft([[3.6, 0.4, 0.42, 0.42, 1.55, 3.6], [2.0, 0.46, 0.46, 0.44, 1.56, 3.4], [-1.0, 0.4, 0.42, 0.4, 1.6, 3]]).translate(0, 0, s * 1.15), body));   // Einläufe
+      parts.push({ geo: new THREE.PlaneGeometry(0.76, 0.78), mat: JET_INNER, p: [3.61, 1.55, s * 1.15], r: [0, Math.PI / 2, 0] }); }
+    parts.push(P(jetLoft([[6.9, 0.03, 0.03, 0.02, 2.26, 2], [6.2, 0.36, 0.34, 0.02, 2.3, 2], [4.9, 0.48, 0.55, 0.02, 2.3, 2], [3.4, 0.44, 0.44, 0.02, 2.3, 2], [2.4, 0.22, 0.16, 0.02, 2.3, 2]].map(c => [c[0], c[1] * 1.15, c[2], c[3], c[4], c[5]])), glass));
+    wingPair({ z: 1.4, le: 1.8, te: -4.4, y: 1.82, t: 0.045 }, { z: 6.3, le: -3.4, te: -5.0, y: 1.82, t: 0.035 });
+    wingPair({ z: 1.3, le: -5.4, te: -7.9, y: 1.68, t: 0.05 }, { z: 3.8, le: -7.4, te: -8.5, y: 1.68, t: 0.04 });
+    finPair(-4.4, -7.6, -6.8, -8.2, 2.9, 0.055, 0.95, 2.2, 0.12);
+    for (const z of [0.72, -0.72]) nozzle(-8.05, 1.8, z, 0.58, 1.1); burnX = -8.6; burnY = 1.8; burnZ = [0.72, -0.72];
+    for (const s of [-1, 1]) { missile(-1.6, 1.4, s * 3.1); missile(-2.1, 1.45, s * 4.6); missile(0.8, 1.05, s * 0.9, 3.4); }
+    gear(5.6, 0, 1.05, 0.3, 0.2); for (const s of [-1, 1]) gear(-1.6, s * 1.6, 1.05, 0.4, 0.28);
+  } else if (ti === 2) {   // MILAN: Deltaflügel, Canards vorn, breiter Einlauf unten, großes Seitenleitwerk
+    parts.push(P(jetLoft([[8.2, 0.02, 0.02, 0.02, 1.86, 2], [7.5, 0.26, 0.26, 0.24, 1.84, 2], [6.4, 0.46, 0.44, 0.42, 1.82, 2.1], [5.0, 0.6, 0.56, 0.54, 1.8, 2.3], [3.4, 0.7, 0.6, 0.6, 1.8, 2.5],
+      [1.4, 0.82, 0.6, 0.66, 1.78, 2.8], [-1.4, 0.92, 0.6, 0.64, 1.78, 3.0], [-4.2, 0.88, 0.56, 0.6, 1.8, 2.8], [-6.2, 0.8, 0.5, 0.52, 1.82, 2.6], [-6.8, 0.78, 0.48, 0.5, 1.82, 2.6]]), body));
+    parts.push(P(jetLoft([[3.0, 0.62, 0.18, 0.36, 1.12, 4.5], [1.8, 0.7, 0.26, 0.4, 1.14, 4], [-0.8, 0.66, 0.3, 0.36, 1.2, 3.4], [-3.0, 0.5, 0.3, 0.2, 1.32, 2.8]]), body));
+    parts.push({ geo: new THREE.PlaneGeometry(1.2, 0.6), mat: JET_INNER, p: [3.01, 1.04, 0], r: [0, Math.PI / 2, 0] });
+    parts.push(P(jetLoft([[5.9, 0.03, 0.03, 0.02, 2.2, 2], [5.3, 0.34, 0.3, 0.02, 2.24, 2], [4.2, 0.44, 0.46, 0.02, 2.24, 2], [2.9, 0.4, 0.38, 0.02, 2.22, 2], [2.0, 0.2, 0.12, 0.02, 2.24, 2]].map(c => [c[0], c[1] * 1.15, c[2], c[3], c[4], c[5]])), glass));
+    wingPair({ z: 0.85, le: 1.2, te: -6.6, y: 1.62, t: 0.04 }, { z: 5.3, le: -5.5, te: -6.6, y: 1.62, t: 0.03 });   // Delta
+    wingPair({ z: 0.6, le: 4.6, te: 3.2, y: 1.98, t: 0.05 }, { z: 2.1, le: 3.6, te: 3.0, y: 2.02, t: 0.04 });        // Canards
+    parts.push(P(jetFin(-2.6, -6.6, -5.6, -6.9, 3.1, 0.06, 0, 2.25, 0), wingM));
+    for (const z of [0.4, -0.4]) nozzle(-7.25, 1.82, z, 0.42, 0.95); burnX = -7.7; burnY = 1.82; burnZ = [0.4, -0.4];
+    for (const s of [-1, 1]) { missile(-3.6, 1.32, s * 2.6); missile(-4.6, 1.38, s * 4.0, 2.5); missile(-2.8, 1.1, s * 1.1, 3.2); }
+    gear(4.8, 0, 1.0, 0.26, 0.18); for (const s of [-1, 1]) gear(-2.4, s * 1.25, 1.05, 0.36, 0.24);
+  } else {   // SCHATTEN: Tarnkappe – kantiger Rumpf mit Kanten (Chines), schräge Leitwerke, eckige Düsen, Waffen innen
+    parts.push(P(jetLoft([[9.0, 0.03, 0.02, 0.02, 1.84, 4], [8.2, 0.42, 0.22, 0.2, 1.82, 5], [6.8, 0.8, 0.42, 0.34, 1.8, 6], [5.0, 1.05, 0.56, 0.42, 1.8, 6], [3.0, 1.35, 0.62, 0.5, 1.8, 7],
+      [0.8, 1.9, 0.6, 0.5, 1.8, 8], [-2.6, 2.0, 0.56, 0.5, 1.8, 8], [-5.4, 1.7, 0.5, 0.46, 1.82, 7], [-7.3, 1.35, 0.42, 0.4, 1.82, 6], [-7.9, 1.25, 0.36, 0.34, 1.82, 6]], 40), body));
+    for (const s of [-1, 1]) { parts.push(P(jetLoft([[3.2, 0.45, 0.4, 0.36, 1.6, 8], [1.4, 0.52, 0.42, 0.38, 1.62, 7], [-1.2, 0.46, 0.4, 0.36, 1.64, 6]]).translate(0, 0, s * 1.55), body));
+      parts.push({ geo: new THREE.PlaneGeometry(0.85, 0.72), mat: JET_INNER, p: [3.22, 1.6, s * 1.55], r: [0, Math.PI / 2 + s * 0.35, 0] }); }
+    parts.push(P(jetLoft([[6.7, 0.03, 0.03, 0.02, 2.2, 2], [6.0, 0.36, 0.32, 0.02, 2.24, 2], [4.6, 0.48, 0.5, 0.02, 2.25, 2], [3.2, 0.42, 0.4, 0.02, 2.24, 2], [2.4, 0.18, 0.1, 0.02, 2.25, 2]].map(c => [c[0], c[1] * 1.15, c[2], c[3], c[4], c[5]])), glass));
+    wingPair({ z: 1.6, le: 1.0, te: -5.2, y: 1.78, t: 0.04 }, { z: 6.4, le: -3.7, te: -5.6, y: 1.78, t: 0.03 });
+    wingPair({ z: 1.4, le: -5.8, te: -8.2, y: 1.72, t: 0.04 }, { z: 3.5, le: -7.3, te: -8.4, y: 1.72, t: 0.03 });
+    finPair(-3.6, -6.6, -5.5, -7.3, 2.5, 0.05, 1.45, 2.15, 0.45);
+    for (const z of [0.7, -0.7]) { parts.push(B(1.0, 0.42, 1.0, JET_NOZ, -8.3, 1.8, z), { geo: new THREE.PlaneGeometry(0.85, 0.3), mat: JET_FLAME, p: [-8.81, 1.8, z], r: [0, -Math.PI / 2, 0] }); }
+    burnX = -8.8; burnY = 1.8; burnZ = [0.7, -0.7];
+    gear(5.4, 0, 1.0, 0.28, 0.2); for (const s of [-1, 1]) gear(-1.8, s * 1.7, 1.05, 0.4, 0.28);
+    for (const s of [-1, 1]) parts.push(B(4.2, 0.03, 0.9, D, -1.0, 1.28, s * 0.8));   // Waffenschacht-Klappen (geschlossen)
+  }
+  root.add(partsToGroup(parts, true));
+  // Nachbrenner: Flammen hinter den Düsen (Länge = Schub)
+  const burner = new THREE.Group(); burner.position.set(burnX, burnY, 0);
+  for (const z of burnZ) {
+    const f = new THREE.Mesh(new THREE.ConeGeometry(ti === 3 ? 0.36 : 0.45, 3, 14, 1, true), JET_FLAME); f.rotation.z = Math.PI / 2; f.position.set(-1.5, 0, z); f.userData.noShadow = true; burner.add(f);
     const fi = new THREE.Mesh(new THREE.ConeGeometry(0.26, 1.6, 12, 1, true), JET_FLAME_IN); fi.rotation.z = Math.PI / 2; fi.position.set(-0.8, 0, z); fi.userData.noShadow = true; burner.add(fi);
   }
   burner.scale.set(0.2, 1, 1); root.add(burner);
   scene.add(root);
   const dummy = new THREE.Group();
-  return { root, spinners: [], fronts: [], prop: dummy, burner, steer: dummy, stand: dummy, wf: dummy, wr: dummy, plane: true, jet: true };
+  return { root, spinners: [], fronts: [], prop: dummy, burner, steer: dummy, stand: dummy, wf: dummy, wr: dummy, plane: true, jet: true, jetType: T.name };
 }
 // Folierung eines Autos tauschen (nur bei dir sichtbar)
 function setCarPaint(v, mat) {
@@ -631,7 +759,7 @@ const vehicles = MAP_VEHICLES.map((v, i) => {
   const kind = v.kind || 'moped';
   // Autotyp: an Drift-Strecken Drift-Autos, sonst abwechselnd Drift / Rennwagen / Muscle-Car (für alle Spieler gleich)
   const ctype = kind === 'car' ? (v.ctype || ['drift', 'race', 'muscle'][i % 3]) : kind === 'plane' ? (v.ctype || null) : null;
-  const m = kind === 'tank' ? makeTank() : kind === 'heli' ? makeHeli() : kind === 'plane' ? (ctype === 'jet' ? makeJet(i) : makePlane(i)) : kind !== 'car' ? makeMoped(MOPED_PAINTS[i % MOPED_PAINTS.length])
+  const m = kind === 'tank' ? makeTank() : kind === 'heli' ? makeHeli() : kind === 'plane' ? (ctype === 'jet' ? makeJet(i, v.jt) : makePlane(i)) : kind !== 'car' ? makeMoped(MOPED_PAINTS[i % MOPED_PAINTS.length])
     : ctype === 'f1' ? makeF1(F1_PAINTS[i % 4])
     : ctype === 'race' ? makeCar(RACE_PAINTS[i % 4], SILVER_RIM, 'race')
     : ctype === 'muscle' ? makeCar(MUSCLE_PAINTS[i % 4], CAR_BLACK, 'muscle')
