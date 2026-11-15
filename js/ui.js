@@ -320,7 +320,8 @@ function frame(t) {
   ambientTick(dt);   // Wind, Vögel, Stadtrauschen
   const sunMoved = followSun(camera.position.x, camera.position.z);
   // Grafik „Leistung“: Schatten nur ~10× pro Sekunde neu zeichnen (und sofort, wenn der Schattenbereich mitwandert)
-  if (gfx === 'perf' || gfx === 'clean') { SHADOW.t -= dt; if (sunMoved || SHADOW.t <= 0) { renderer.shadowMap.needsUpdate = true; SHADOW.t = 0.1; } }
+  // („Klar & schnell“: nur ~4× pro Sekunde – Schatten bewegen sich kaum, spart viel Grafikleistung)
+  if (gfx === 'perf' || gfx === 'clean') { SHADOW.t -= dt; if (sunMoved || SHADOW.t <= 0) { renderer.shadowMap.needsUpdate = true; SHADOW.t = gfx === 'clean' ? 0.25 : 0.1; } }
   if (window.waterNormal) { window.waterNormal.offset.x += dt * 0.004; window.waterNormal.offset.y += dt * 0.0025; }
   skyMesh.position.copy(camera.position);
   // Tiefen-Genauigkeit: im Flugzeug/Heli (Kamera hinter dem Fahrzeug) und im Menü die nahe Schnittebene je nach Höhe weiter weg

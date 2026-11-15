@@ -5,8 +5,8 @@ const PREFIX = 'kampfzone-arena-v1-';
 const TOUCH = matchMedia('(pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && matchMedia('(hover: none)').matches);
 if (TOUCH) document.body.classList.add('touch');
 
-/* Update-Prüfung: beim Veröffentlichen wird 20261115-173711 durch eine Versionsnummer ersetzt */
-const BUILD = '20261115-173711';
+/* Update-Prüfung: beim Veröffentlichen wird 20261115-192450 durch eine Versionsnummer ersetzt */
+const BUILD = '20261115-192450';
 // Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
 // Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
 const UPD = { newer: null };
@@ -565,7 +565,7 @@ new THREE.RGBELoader(loadMgr).setDataType(THREE.HalfFloatType).load('textures/sk
       }`,
     side: THREE.BackSide, depthWrite: false, depthTest: false }));
   sky.renderOrder = -1000; sky.frustumCulled = false; sky.userData.noMerge = true; sky.matrixAutoUpdate = false;
-  sky.onBeforeRender = (r, s, cam) => { sky.position.copy(cam.position); sky.updateMatrix(); sky.updateMatrixWorld(); };
+  sky.onBeforeRender = (r, s, cam) => { sky.position.copy(cam.position); sky.scale.setScalar(Math.min(1, cam.far * 0.9 / 700)); sky.updateMatrix(); sky.updateMatrixWorld(); };   // immer innerhalb der Sichtweite
   scene.add(sky); window.SKY_DOME = sky;
   scene.background = null;
   skyMesh.visible = false;
@@ -808,6 +808,10 @@ function roundedBoxGeo(w, h, d, r, m = 2, tile = 0) {
       const k = 0.88 + n2 * 0.22; col[i * 3] = c[0] * k; col[i * 3 + 1] = c[1] * k; col[i * 3 + 2] = c[2] * k;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); }
+  // Welt: Dreiecke, die komplett unter der Wiese liegen, gar nicht erst zeichnen (spart über die Hälfte des Geländes)
+  if (welt) { const ix = geo.index.array, keep = [];
+    for (let j = 0; j < ix.length; j += 3) if (pos.getY(ix[j]) > -0.59 || pos.getY(ix[j + 1]) > -0.59 || pos.getY(ix[j + 2]) > -0.59) keep.push(ix[j], ix[j + 1], ix[j + 2]);
+    geo.setIndex(keep); }
   // Einfacheres Material für die weite Landschaft (schneller)
   const terrain = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: ptex('grass_diff.jpg', true, 250, 250), vertexColors: true }));
   // Foto (bräunlich) → fast farblose Struktur mit Mittelwert 1; die Farbe kommt aus den Eckpunkt-Farben

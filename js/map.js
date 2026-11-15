@@ -2893,6 +2893,7 @@ function weltFields() {
     trGreen: new THREE.MeshStandardMaterial({ color: 0x2f7a32, roughness: 0.45, metalness: 0.3 }),
   };
   M.bale.map.wrapS = THREE.RepeatWrapping; M.corn.side = THREE.DoubleSide;
+  for (const k of ['wheat', 'wheatS', 'corn', 'cornS', 'rape', 'rapeS']) M[k].userData.crop = true;   // „Klar & schnell“: hohe Pflanzen ausblenden (man sieht den Acker)
   M.wheat.color.setRGB(0.56, 0.54, 0.5); M.wheatS.color.setRGB(0.8, 0.78, 0.72); M.rape.color.setRGB(0.82, 0.82, 0.8);   // in der Sonne nicht weiß überstrahlen
   // senkrechter Rand (Halme) zwischen zwei Punkten, Höhe h; Bild wiederholt sich alle 4 m
   const edge = (x0, z0, x1, z1, h, mat) => {
@@ -3654,7 +3655,7 @@ function foliageList() {
   const leafy = m => {
     if (!m) return false; const o = (m.userData && m.userData.orig) || m;
     if (o === HEDGE_MAT || o === LOG_MAT) return false;
-    return o === leafMat2 || o === treeLeafMat || o === treeTrunkMat || o.userData.trunk || o === TKM.sakura || o === FURN.glass
+    return o === leafMat2 || o === treeLeafMat || o === treeTrunkMat || o.userData.trunk || o.userData.crop || o === TKM.sakura || o === FURN.glass
       || o.map === TEX.needles || o.map === TEX.blades || o.map === TEX.bark || o.map === LEAF_TEX;
   };
   scene.traverse(o => {
@@ -3691,7 +3692,8 @@ function applyGfx(v) {
   const wasPotato = gfx === 'potato' && LAMB.size, wasClean = gfx === 'clean';
   gfx = v;
   const dpr = devicePixelRatio || 1, C = v === 'clean', thr = v === 'perf' || C;
-  renderer.setPixelRatio(v === 'high' ? Math.min(dpr, 1.5) : v === 'medium' || C ? 1 : v === 'perf' ? 0.9 : v === 'low' ? 0.7 : 0.5);
+  // „Klar & schnell“: 80 % Auflösung (die Kantenglättung im Kino-Look hält das Bild trotzdem sauber)
+  renderer.setPixelRatio(v === 'high' ? Math.min(dpr, 1.5) : v === 'medium' ? 1 : C ? 0.8 : v === 'perf' ? 0.9 : v === 'low' ? 0.7 : 0.5);
   // „Leistung“/„Klar & schnell“: Schattenbild nicht in jedem Bild neu zeichnen (ui.js stößt es ~10× pro Sekunde an)
   renderer.shadowMap.autoUpdate = !thr; renderer.shadowMap.needsUpdate = true;
   // einfachere Schattenkanten (PCF statt weich gefiltert) – braucht neu übersetzte Shader
@@ -3701,9 +3703,10 @@ function applyGfx(v) {
   sun.castShadow = !gfxLow();
   if (window.grassI) window.grassI.visible = !gfxLow() && !C;
   const P = v === 'potato';
-  scene.fog.near = P ? FOG0.near * 0.45 : FOG0.near; scene.fog.far = P ? FOG0.far * 0.55 : FOG0.far;
-  camera.far = P ? scene.fog.far + 10 : FOG0.cam; camera.updateProjectionMatrix();
-  CULL_DIST = P ? 150 : v === 'low' ? 200 : C ? 190 : thr ? 215 : FOG0.cull;
+  // „Klar & schnell“: etwas kürzere Sicht (Dunst früher) → viel weniger Häuser/Fahrzeuge zu zeichnen, Aufploppen liegt im Dunst
+  scene.fog.near = P ? FOG0.near * 0.45 : C ? FOG0.near * 0.8 : FOG0.near; scene.fog.far = P ? FOG0.far * 0.55 : C ? FOG0.far * 0.8 : FOG0.far;
+  camera.far = P ? scene.fog.far + 10 : C ? FOG0.cam * 0.8 : FOG0.cam; camera.updateProjectionMatrix();
+  CULL_DIST = P ? 150 : v === 'low' ? 200 : C ? 165 : thr ? 215 : FOG0.cull;
   if (P) swapMats(true); else if (wasPotato) swapMats(false);
   if (C || wasClean) { for (const o of foliageList()) o.visible = !C; setRelief(C); setTreeBoxes(!C); }   // „Klar & schnell“ an/aus
   const size = v === 'high' ? 2048 : 1024;
