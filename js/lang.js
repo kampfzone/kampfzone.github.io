@@ -5,6 +5,8 @@
    während des Spiels erscheinen (beobachtet die Seite). Feste Sätze: genaue Treffer; Sätze mit Zahlen/Namen: Muster.
    Sprache: Menü → 🌐 (gespeichert); sonst Browser-Sprache; auf Spieleportalen Englisch (außer deutsche Spieler). */
 (function () {
+  // Nur im Spieleportal-Paket (CrazyGames): die normale Seite bleibt rein deutsch, ohne Umschalter
+  if (!window.KZ_PORTAL) { window.LANG = 'de'; window.T = s => s; return; }
   const D = window.KZ_EN || { exact: {}, rules: [] };
   let lang = null;
   try { lang = localStorage.getItem('kz_lang'); } catch (e) {}
@@ -66,7 +68,7 @@
 // Sprachauswahl im Menü (🌐 Deutsch / English) – Wechsel lädt die Seite neu
 (function () {
   const opt = document.getElementById('menuSide');
-  if (!opt) return;
+  if (!opt || !window.KZ_PORTAL) return;
   if (window.LANG === 'en') { const n = document.getElementById('menuNews'); if (n) n.style.display = 'none'; }   // Neuigkeiten-Liste gibt es nur auf Deutsch
   const row = document.createElement('div'); row.id = 'langRow'; row.style.cssText = 'margin:8px 0;display:flex;gap:6px;justify-content:center;align-items:center;font-size:14px';
   row.innerHTML = '<span>🌐</span><button class="sec small" data-l="de">Deutsch</button><button class="sec small" data-l="en">English</button>';

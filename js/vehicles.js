@@ -729,7 +729,7 @@ const CAR_TYPES = {
     p: { m: 1150, Iz: 1950, muF: 1.32, muR: 1.45, BF: 9, BR: 11.5, P: 265000, Fmax: 9300, drag: 0.92, brake: 1.35, maxSteer: 0.5, h: 0.42, tc: 0.75 } },
   muscle: { name: 'Muscle-Car', info: 'viel Kraft, Burnouts – bei Vollgas kommt das Heck',
     p: { m: 1600, Iz: 2950, muF: 0.98, muR: 1.06, P: 290000, Fmax: 10800, drag: 1.25, brake: 0.95, maxSteer: 0.58, steerFade: 9, h: 0.55 } },
-  f1: { name: 'Grand-Prix-Renner', info: 'über 330 km/h, Abtrieb und enormer Grip – sehr enge Kurven möglich',
+  f1: { name: PORTAL ? 'Grand-Prix-Renner' : 'Formel 1', info: 'über 330 km/h, Abtrieb und enormer Grip – sehr enge Kurven möglich',
     // enge Kurven: viel Lenkeinschlag, der erst bei sehr hohem Tempo abnimmt (fadePow 2), sehr griffige Reifen, Bremskraft vor allem vorne
     p: { m: 800, a: 1.8, b: 1.8, h: 0.25, Iz: 1050, muF: 3.3, muR: 3.9, BF: 13, BR: 16, P: 640000, Fmax: 10500, drag: 0.8, roll: 120, brake: 2.6, brakeRear: 0.12,
       maxSteer: 0.62, steerFade: 40, fadePow: 2, tc: 0.8, rev: 96, mw: 40, aero: 2.4 } },

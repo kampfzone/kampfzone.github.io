@@ -216,7 +216,7 @@ rules: [
 ["🏁 Erst in ein Auto steigen – dann bringt dich (.+) an den Start", "🏁 Get into a car first – then $1 takes you to the start"], ["🏁 Erst in ein Auto steigen – dann bringt dich", "🏁 Get into a car first – then"], ["an den Start", "to the start"],
 ["🏁 (.+): zurück an den Start – fahr los!", "🏁 {T:$1}: back to the start – go!"], ["🏁 Runde (.+?)(  NEUE BESTZEIT!)?  \\+(\\d+) Coins", (m, t, b, c) => '🏁 Lap ' + t + (b ? '  NEW BEST TIME!' : '') + '  +' + c + ' coins'],
 ["🏁 (.+) · Runde (\\d+) · (.+)", "🏁 {T:$1} · Lap $2 · $3"], ["🏁 (.+) · Fahr über die Startlinie(.*)", "🏁 {T:$1} · Drive over the start line$2"], ["· Bestzeit (.+)", "· best time $1"],
-["Grand-Prix-Ring", "Grand Prix Ring"], ["Hügel-Ring", "Hill Ring"], ["Wald-Strecke", "Forest Track"], ["Feld-Strecke", "Field Track"],
+["Grand-Prix-Ring", "Grand Prix Ring"], ["Hügel-Ring", "Hill Ring"], ["Wald-Ring", "Forest Ring"], ["Drift-Arena", "Drift Arena"],["Wald-Strecke", "Forest Track"], ["Feld-Strecke", "Field Track"],
 ["FLUGZEUG!  (.+) Gas · ab ~90 km/h (.+) = hochziehen · (.+) = Nase runter · (.+) Kurven", "PLANE!  {T:$1} throttle · from ~90 km/h {T:$2} = pull up · {T:$3} = nose down · {T:$4} turn"],
 ["KAMPFJET!  (.+) Schub \\(Vollgas = Nachbrenner\\) · ab ~170 km/h (.+) = hochziehen · Linksklick Kanone · Rechtsklick Lenkrakete", "FIGHTER JET!  {T:$1} thrust (full = afterburner) · from ~170 km/h {T:$2} = pull up · left click cannon · right click guided missile"],
 // Jobs
