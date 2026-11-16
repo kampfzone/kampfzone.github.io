@@ -1271,6 +1271,11 @@ function jetHint() {
 // Zielrichtung = Fadenkreuz (Kamera), Startpunkt am Jet; fwd/right = Achsen des Jets
 // Achsen des Jets + Rumpfmitte c (Drehpunkt, 1,7 m über den Rädern)
 const JET_PIVOT = 1.7, _jetUp = new THREE.Vector3();
+// Schub von Flugzeug/Jet: steigt, solange Gas gedrückt ist (Handy: so weit wie der Regler); loslassen = geht zurück auf Leerlauf, S/Bremse = schneller
+function planeThrottle(cur, thr, dt) {
+  const tgt = Math.max(0, thr), rate = cur < tgt ? 0.9 : thr < 0 ? 1.4 : 0.5;
+  return cur < tgt ? Math.min(tgt, cur + rate * dt) : Math.max(tgt, cur - rate * dt);
+}
 function jetAxes() {
   const c = new THREE.Vector3(ride.pos.x, ride.pos.y + JET_PIVOT, ride.pos.z);
   if (ride.air && ride.q) return { c, fwd: new THREE.Vector3(1, 0, 0).applyQuaternion(ride.q), right: new THREE.Vector3(0, 0, 1).applyQuaternion(ride.q), up: new THREE.Vector3(0, 1, 0).applyQuaternion(ride.q) };
@@ -1361,7 +1366,7 @@ function jetRide(dt) {
   if (touchIn.my) thr = -touchIn.my;
   if (touchIn.mx) steer = -touchIn.mx;
   const pull = (keys.Space ? 1 : 0) - (keys.KeyC || keys.ControlLeft ? 1 : 0);
-  ride.thrl = Math.max(0, Math.min(1, (ride.thrl || 0) + thr * (thr > 0 ? 0.55 : 0.8) * dt));
+  ride.thrl = planeThrottle(ride.thrl || 0, thr, dt);   // Schub nur, solange Gas gedrückt wird
   const ab = ride.thrl > 0.97, T = P.thrust * (ab ? 1.6 : 1), VM = P.vmax * (ab ? 1.35 : 1);
   let v = ride.planeV || 0;
   const gh = groundH(ride.pos.x, ride.pos.z, ride.pos.y);
@@ -1479,8 +1484,8 @@ function planeRide(dt) {
   if (touchIn.mx) steer = -touchIn.mx;
   const pull = (keys.Space ? 1 : 0) - (keys.KeyC || keys.ControlLeft ? 1 : 0);
   const gh = groundH(ride.pos.x, ride.pos.z, ride.pos.y), alt = ride.pos.y - gh, onG = alt < 0.05;
-  // Gas (Hebel bleibt stehen), am Boden mit S bremsen
-  ride.thrl = Math.max(0, Math.min(1, (ride.thrl || 0) + thr * (thr > 0 ? 0.55 : 0.8) * dt));
+  // Gas nur, solange W gedrückt ist (loslassen = Schub geht zurück), am Boden mit S bremsen
+  ride.thrl = planeThrottle(ride.thrl || 0, thr, dt);
   let v = ride.planeV || 0;
   const pitch0 = ride.pitch || 0;
   const flaps = (0.35 - Math.min(0.35, ride.thrl)) * (jet ? 0.04 : 0.06) * v;   // wenig Gas: Landeklappen → langsamer anfliegen (~95 km/h)

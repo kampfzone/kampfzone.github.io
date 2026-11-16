@@ -54,12 +54,19 @@
     if (t0) t0.stop(); return cv.captureStream(30);
   }
   const camReady = () => CAM.connected && CAM.video && CAM.video.videoWidth > 0;
+  // Während der Aufnahme höchstens 1280 Pixel breit rendern: das Video ist sowieso nicht breiter → im Video kein Unterschied,
+  // aber die Grafikkarte hat viel weniger zu tun und das Spiel (und damit das Video) läuft flüssiger
+  function capRes(on) {
+    if (on) { const pr = renderer.getPixelRatio(), w = innerWidth * pr; if (w > 1300) { REC.pr = pr; REC.prCap = pr * 1280 / w; renderer.setPixelRatio(REC.prCap); } }
+    else if (REC.pr) { if (Math.abs(renderer.getPixelRatio() - REC.prCap) < 1e-6) renderer.setPixelRatio(REC.pr); REC.pr = 0; }   // Grafikstufe inzwischen geändert → die neue behalten
+  }
   async function start() {
     if (REC.mr || REC.busy) return;
     if (!window.MediaRecorder) { say('Aufnahme geht in diesem Browser leider nicht'); return; }
     REC.busy = true;
     let stream = null, mode = 'bild';
     if (camReady()) {   // oben Spiel, unten Lenkrad-Kamera – auf einer Leinwand zusammengesetzt
+      capRes(true);
       // Höhe des unteren Bereichs = echtes Format der Kamera (Querformat 16:9 → 720 px, Hochkant bis 1280 px) → nie gestaucht
       const gc = renderer.domElement, W = 1280, gH = Math.round(W * gc.height / gc.width / 2) * 2;
       const cH = Math.round(Math.min(1280, Math.max(360, W * CAM.video.videoHeight / CAM.video.videoWidth)) / 2) * 2;
@@ -74,14 +81,17 @@
       } catch (e) { stream = null; }   // abgelehnt → Spielbild direkt aufnehmen
     }
     if (!stream) {
+      capRes(true);
       try { stream = canvasStream(renderer.domElement); } catch (e) { stream = null; }
-      if (!stream) { REC.busy = false; say('Aufnahme geht in diesem Browser leider nicht'); return; }
+      if (!stream) { REC.busy = false; capRes(false); say('Aufnahme geht in diesem Browser leider nicht'); return; }
       mode = 'bild';
     }
     if (!stream.getAudioTracks().length) { const a = await gameAudio(); if (a) stream.addTrack(a); }
     const type = pickType();
     let mr;
-    try { mr = new MediaRecorder(stream, Object.assign({ videoBitsPerSecond: TOUCH ? 4e6 : mode === 'kamera' ? 10e6 : 8e6 }, type ? { mimeType: type } : {})); }
+    // MP4 (H.264) braucht für gute Qualität weniger Datenrate als WebM → kleinere Dateien, weniger Arbeit beim Kodieren
+    const mp4 = type.indexOf('mp4') >= 0;
+    try { mr = new MediaRecorder(stream, Object.assign({ videoBitsPerSecond: TOUCH ? 4e6 : mode === 'kamera' ? (mp4 ? 7e6 : 10e6) : (mp4 ? 6e6 : 8e6), audioBitsPerSecond: 160e3 }, type ? { mimeType: type } : {})); }
     catch (e) { try { mr = new MediaRecorder(stream); } catch (e2) { REC.busy = false; cleanup(stream); say('Aufnahme konnte nicht starten'); return; } }
     REC.chunks = [];
     mr.ondataavailable = e => { if (e.data && e.data.size) REC.chunks.push(e.data); };
@@ -94,7 +104,7 @@
   }
   function stop() { if (REC.mr && REC.mr.state !== 'inactive') try { REC.mr.stop(); } catch (e) {} }
   function cleanup(stream) {
-    REC.vt = null; REC.comp = null;
+    REC.vt = null; REC.comp = null; capRes(false);
     if (stream) for (const tr of stream.getTracks()) try { tr.stop(); } catch (e) {}
     try { if (REC.aud && master) master.disconnect(REC.aud); } catch (e) {}
     REC.aud = null;
@@ -135,11 +145,13 @@
       if (typeof DRIFT !== 'undefined' && DRIFT.pts > 0) { const t = 'DRIFT ' + Math.round(DRIFT.pts).toLocaleString('de-DE'); g.fillStyle = '#ffcc33'; g.strokeText(t, 28, gH - 96); g.fillText(t, 28, gH - 96); }
     }
   }
-  // nach jedem fertigen Bild (ui.js): ins Video übernehmen, höchstens 30× pro Sekunde
-  let lastF = 0;
+  // nach jedem fertigen Bild (ui.js): ins Video übernehmen, im Schnitt 30× pro Sekunde.
+  // Mit Zeitkonto statt starrer 32-ms-Sperre: läuft das Spiel z. B. mit 40 fps, kommen trotzdem ~30 Bilder ins Video (nicht nur 20)
+  let nextF = 0;
   window.recFrame = () => {
     if (!REC.mr || (!REC.vt && !REC.comp)) return;
-    const n = performance.now(); if (n - lastF < 32) return; lastF = n;
+    const n = performance.now(); if (n < nextF - 6) return;
+    nextF = Math.max(nextF + 1000 / 30, n - 10);
     if (REC.comp) drawComp();
     if (REC.vt) try { REC.vt.requestFrame(); } catch (e) {}
   };
