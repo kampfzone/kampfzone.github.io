@@ -196,6 +196,7 @@
     else { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js'; s.onload = draw; document.head.appendChild(s); }
   }
   function openCam() {
+    if (PORTAL) return;   // Portal: keine Lenkrad-Kamera (führt auf eine fremde Seite)
     if (document.pointerLockElement) document.exitPointerLock();
     if (!CAM.panel) {
       const p = document.createElement('div'); p.id = 'camPanel';

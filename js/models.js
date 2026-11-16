@@ -1010,7 +1010,8 @@ function impactFx(point, normal) {
   puff(point.clone().addScaledVector(normal, 0.05), 0xb8ad98, 0.25, 0.5, normal.clone().multiplyScalar(0.8).add(new THREE.Vector3(0, 0.3, 0)), { opacity: 0.55, grow: 2.2 });
 }
 function bloodFx(point) {
-  for (let i = 0; i < 3; i++) puff(point, 0x7a0a0a, rnd(0.15, 0.3), 0.35, new THREE.Vector3(rnd(-1, 1), rnd(-0.2, 1), rnd(-1, 1)), { opacity: 0.85, grow: 2.5 });
+  // Portal (ab 12 Jahren): Staub statt Blut
+  for (let i = 0; i < 3; i++) puff(point, PORTAL ? 0xcfc6b4 : 0x7a0a0a, rnd(0.15, 0.3), 0.35, new THREE.Vector3(rnd(-1, 1), rnd(-0.2, 1), rnd(-1, 1)), { opacity: 0.85, grow: 2.5 });
 }
 // Patronenhülsen
 const SHELL_GEO = new THREE.CylinderGeometry(0.006, 0.006, 0.024, 6), SHELL_MAT = GUN_MATS.brass;

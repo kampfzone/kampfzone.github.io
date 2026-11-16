@@ -98,8 +98,8 @@ function lockPointer() {
 }
 // Vollbild-Modus (Optionen): an = Spiel läuft im Vollbild, auch nach dem Zurückkehren ins Spiel
 // Handy: standardmäßig an. iPhone kann im Browser kein Vollbild → Hinweis „Zum Home-Bildschirm“ (startet dann ohne Leisten)
-const FS = { on: TOUCH };
-try { const v = localStorage.getItem('kz_fs'); if (v !== null) FS.on = v === '1'; } catch (e) {}
+const FS = { on: TOUCH && !PORTAL };   // Portal: Vollbild macht das Portal selbst (eigener Knopf verboten)
+try { const v = localStorage.getItem('kz_fs'); if (v !== null && !PORTAL) FS.on = v === '1'; } catch (e) {}
 const FS_APP = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone === true;   // vom Home-Bildschirm gestartet
 const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement || null;
 const fsCan = () => { const d = document.documentElement; return !!(d.requestFullscreen || d.webkitRequestFullscreen) && document.fullscreenEnabled !== false && document.webkitFullscreenEnabled !== false; };

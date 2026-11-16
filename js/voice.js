@@ -6,6 +6,7 @@
    Das Mikrofon wird erst beim ersten Sprechen angefragt und sendet nur, solange man spricht.
    Zwischen zwei Spielern gibt es genau eine Sprachverbindung; wer schon ein Mikrofon hat, ruft an. */
 (function () {
+  if (window.KZ_PORTAL) return;   // Spieleportal: kein Sprachchat mit Fremden
   // mode: 'toggle' = Taste einmal drücken → Mikro bleibt an, bis man nochmal drückt (Standard) · 'ptt' = Taste halten · 'open' = immer an
   // live: Mikro ist eingeschaltet (bleibt gespeichert – auch nach dem Neuladen wieder an)
   const VC = { on: true, mode: 'toggle', live: false, vol: 1, stream: null, asking: false, denied: false, calls: {}, sent: {}, out: {}, ana: {}, speak: {} };

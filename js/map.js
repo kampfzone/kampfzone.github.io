@@ -2712,7 +2712,7 @@ function weltF1(road) {
   const ads = [['TURBO', '#ffd21f', '#111'], ['APEX OIL', '#c8102e', '#fff'], ['GRIP', '#111', '#ffd21f'], ['NITRO', '#1a2a6c', '#fff']];
   for (let k = 0; k < 8; k++) { const a = ads[k % 4]; tkSign(640 + k * 34, 0.7, -85.6, 20, 1.2, 0, tkSignMat(a[0], a[1], a[2], false)); }
   const xs = pts.map(p => p.x), zs = pts.map(p => p.z);
-  (window.DRIFT_TRACKS = window.DRIFT_TRACKS || []).push({ pts: pts.map(p => [p.x, p.z]), W, name: 'Formel-1-Ring', key: 'f1', start: [st.x, st.z],
+  (window.DRIFT_TRACKS = window.DRIFT_TRACKS || []).push({ pts: pts.map(p => [p.x, p.z]), W, name: 'Grand-Prix-Ring', key: 'f1', start: [st.x, st.z],
     box: [Math.min(...xs) - 14, Math.min(...zs) - 14, Math.max(...xs) + 14, Math.max(...zs) + 14] });
   window.MAP_STREETS.push([600, PZ - 5, 920, PZ + 5], [575.5, -49, 584.5, 6.5]);
 }
@@ -3202,7 +3202,7 @@ function weltRingstadt(road, reserve) {
       rowN(); euRow(425, X1 - 4, z1 - 3.5, true, 1, 11, []);
     } else if (b === 2) {   // Fan-Meile an der Hauptstraße: Läden, Fan-Shop, Imbiss
       rowN(); rowW();
-      cityShop(390, z1 - 12, 18, 14, 2, MAT.plaster2, true, '🏁 F1 FANSHOP', ['#c8102e', '#ffffff']);
+      cityShop(390, z1 - 12, 18, 14, 2, MAT.plaster2, true, '🏁 GP FANSHOP', ['#c8102e', '#ffffff']);
       cityShop(432, z1 - 12, 16, 13, 2, MAT.brick, true, 'IMBISS BOXENSTOPP', ['#ffd21f', '#111111']);
       for (let k = 0; k < 4; k++) leafTree(458, z0 + 20 + k * 22, 0.9);
     } else if (b === 3) {   // Flughafen-Hotel + Mietwagen
@@ -3215,7 +3215,7 @@ function weltRingstadt(road, reserve) {
   }
   // Wegweiser an der Ostallee
   addBox(AX - 6, 0, 9, 0.15, 3.4, 0.15, MAT.metal, 1, { round: 0.05 });
-  tkSign(AX - 6, 3.0, 9.1, 5.5, 1.2, 0, tkSignMat('🏁 F1-RING  ✈ FLUGHAFEN →', '#0d5a2b', '#ffffff', false));
+  tkSign(AX - 6, 3.0, 9.1, 5.5, 1.2, 0, tkSignMat('🏁 GP-RING  ✈ FLUGHAFEN →', '#0d5a2b', '#ffffff', false));
   weltOstDeko();
 }
 // Bebauung am F1-Ring (Fahrerlager, Innenfeld) und am Flughafen (Parkhaus, Feuerwache, Tanklager, Frachtzentrum)

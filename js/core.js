@@ -4,9 +4,20 @@ const PREFIX = 'kampfzone-arena-v1-';
 // Handy/Tablet erkennen (Touchscreen ohne Maus) → Touch-Steuerung statt Maus & Tastatur
 const TOUCH = matchMedia('(pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && matchMedia('(hover: none)').matches);
 if (TOUCH) document.body.classList.add('touch');
+// Spieleportal (z. B. CrazyGames): das Paket setzt window.KZ_PORTAL. Dort: kein Sprachchat, keine Börse, kein eigener Vollbild-Knopf,
+// keine App-Installation, keine Lenkrad-Kamera, keine Selbst-Aktualisierung, keine Neuigkeiten-Liste (siehe crazy.js)
+const PORTAL = window.KZ_PORTAL || '';
+if (PORTAL) {
+  document.body.classList.add('portal');
+  const st = document.createElement('style');
+  st.textContent = `body.portal #btnFs, body.portal #fsHint, body.portal #btnInstall, body.portal #btnBoerse1, body.portal #btnBoerse2, body.portal #menuNews,
+    body.portal #camBtn, body.portal #verInfo, body.portal #installHelp { display: none !important }
+    body.portal { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none } body.portal input, body.portal select { -webkit-user-select: text; user-select: text }`;
+  document.head.appendChild(st);
+}
 
-/* Update-Prüfung: beim Veröffentlichen wird 20261116-162931 durch eine Versionsnummer ersetzt */
-const BUILD = '20261116-162931';
+/* Update-Prüfung: beim Veröffentlichen wird 20261116-170523 durch eine Versionsnummer ersetzt */
+const BUILD = '20261116-170523';
 // Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
 // Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
 const UPD = { newer: null };
@@ -18,7 +29,7 @@ function verLabel() {
   el.style.color = UPD.newer ? '#ffcc33' : '';
 }
 async function checkUpdate(manual) {
-  if (BUILD.startsWith('__') || !location.protocol.startsWith('http')) return;
+  if (BUILD.startsWith('__') || !location.protocol.startsWith('http') || PORTAL) return;   // Portal: das Portal liefert neue Versionen selbst aus
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     const j = await r.json(); UPD.checked = true;

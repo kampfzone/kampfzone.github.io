@@ -324,6 +324,7 @@ async function boRefresh(force) {
 }
 let boLock = false;   // nach dem Schließen wieder ins Spiel (wenn von der Karte aus geöffnet)
 function openBoerse(fromWorld) {
+  if (PORTAL) return;   // Portal: keine Börse mit echten Kursen
   boLock = fromWorld === true;
   renderBoerse(); $('boerse').classList.remove('hidden');
   if (document.pointerLockElement) document.exitPointerLock();
