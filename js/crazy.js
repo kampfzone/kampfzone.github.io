@@ -46,7 +46,21 @@
     try { if (SDK.user.isUserAccountAvailable) { const u = await SDK.user.getUser(); const inp = document.getElementById('nameIn');
       if (u && u.username && inp && !localStorage.getItem('kz_name')) inp.value = u.username.slice(0, 16); } } catch (e) {}
     // Über eine Einladung gekommen → automatisch beitreten
-    try { const code = SDK.game.getInviteParam('room'); if (code && /^[A-Z0-9]{5}$/.test(code) && !running) { document.getElementById('codeIn').value = code; setTimeout(() => document.getElementById('btnJoin').click(), 600); } } catch (e) {}
+    let invited = false;
+    try { const code = SDK.game.getInviteParam('room'); if (code && /^[A-Z0-9]{5}$/.test(code) && !running) { invited = true; document.getElementById('codeIn').value = code; setTimeout(() => document.getElementById('btnJoin').click(), 600); } } catch (e) {}
+    // Einladung angenommen, während man schon im Spiel ist → aktuellen Raum verlassen und dem Raum des Freundes beitreten
+    try { SDK.game.addJoinRoomListener(p => {
+      const code = p && p.room; if (!code || !/^[A-Z0-9]{5}$/.test(code) || code === roomCode) return;
+      if (!running) { document.getElementById('codeIn').value = code; document.getElementById('btnJoin').click(); return; }
+      try { SDK.game.leftRoom(); } catch (e) {}
+      try { sessionStorage.setItem('kz_autojoin', code); } catch (e) {}
+      try { peer && peer.destroy(); } catch (e) {}
+      location.reload();
+    }); } catch (e) {}
+    // „Sofort-Mehrspieler“ (CrazyGames startet das Spiel für eine Gruppe): gleich einen eigenen Raum öffnen, dem Freunde beitreten können
+    try { if (SDK.game.isInstantMultiplayer && !invited && !running) setTimeout(() => { if (!running) document.getElementById('btnQuick').click(); }, 800); } catch (e) {}
+    // Raum verlassen → CrazyGames Bescheid sagen
+    try { const lv = document.getElementById('btnLeave'); if (lv) lv.addEventListener('click', () => { try { SDK.game.leftRoom(); } catch (e) {} }, true); } catch (e) {}
     // Einladungslink kopieren: Link von CrazyGames statt der eigenen Adresse
     const cp = document.getElementById('btnCopy');
     if (cp) cp.onclick = () => {
