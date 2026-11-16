@@ -5,8 +5,8 @@ const PREFIX = 'kampfzone-arena-v1-';
 const TOUCH = matchMedia('(pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && matchMedia('(hover: none)').matches);
 if (TOUCH) document.body.classList.add('touch');
 
-/* Update-Prüfung: beim Veröffentlichen wird 20261116-160935 durch eine Versionsnummer ersetzt */
-const BUILD = '20261116-160935';
+/* Update-Prüfung: beim Veröffentlichen wird 20261116-162931 durch eine Versionsnummer ersetzt */
+const BUILD = '20261116-162931';
 // Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
 // Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
 const UPD = { newer: null };
@@ -454,6 +454,14 @@ function sndBoom(pos) {
   THREE.Color.prototype.setHex = function (h) { sh.call(this, h); return this.convertSRGBToLinear(); };
   THREE.Color.prototype.setStyle = function (s) { ss.call(this, s); return this.convertSRGBToLinear(); };
 })();
+// Kontaktschatten: senkrechte Flächen der Karte (Wände, Mauern, Stämme …) werden zum Boden hin dunkler – dort kommt weniger
+// Himmelslicht hin. Nur Materialien mit GROUND_AO (setzt die Karte), billige Rechnung aus Höhe und Flächenrichtung.
+THREE.ShaderChunk.aomap_fragment += `
+#if defined( GROUND_AO ) && defined( STANDARD )
+{ vec3 gp = -vViewPosition - viewMatrix[3].xyz; float gy = dot(viewMatrix[1].xyz, gp), gn = abs(dot(viewMatrix[1].xyz, normal));
+  float gao = mix(mix(0.42, 1.0, smoothstep(0.0, 1.3, gy)), 1.0, smoothstep(0.45, 0.8, gn));
+  reflectedLight.indirectDiffuse *= gao; reflectedLight.directDiffuse *= mix(1.0, gao, 0.35); reflectedLight.indirectSpecular *= gao; }
+#endif`;
 THREE.Cache.enabled = true;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -712,7 +720,7 @@ const MAT = {
   metal: pbr('metal', 1.5),
   roof: pbr('roof', 2.5),
   sandbag: new THREE.MeshStandardMaterial({ map: TEX.sandbag, roughness: 1, bumpMap: TEX.sandbag, bumpScale: 0.015 }),
-  grass: pbr('grass', 2),
+  grass: pbr('grass', 2, { map: tintedTex('grass', 0x5f8a3a) }),   // Rasen (Parks, Gärten, Höfe): grün eingefärbt – das Foto allein wirkt von oben wie Erde
   window: new THREE.MeshStandardMaterial({ map: TEX.window, roughness: 0.06, metalness: 0.5, envMapIntensity: 1.4 }),
   door: new THREE.MeshStandardMaterial({ map: TEX.door, roughness: 0.6, metalness: 0.3 }),
   dark: new THREE.MeshStandardMaterial({ color: 0x2e3236, roughness: 0.6, metalness: 0.5 }),

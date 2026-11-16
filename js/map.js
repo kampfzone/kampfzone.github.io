@@ -1469,17 +1469,32 @@ function weltHouse(cx, cz, face, wallMat, roofMat = TKM.roofTile) {
   wallRun('x', x0 + T, x1 - T, cz, 0, H, 0.15, MAT.plaster, [[cx - 1.6, cx - 0.5, 0, 2.15]], NR);
   decalT(cx, cz, W - 0.5, D - 0.5, TKM.wood, 2, 0, 0.014);
   addBox(cx, H, cz, W + 0.3, 0.2, D + 0.3, MAT.concrete, 2);   // Decke
-  // Satteldach (Kulisse)
-  const rise = D * 0.38, slope = Math.hypot(D / 2 + 0.5, rise), ang = Math.atan2(rise, D / 2 + 0.5);
-  for (const s of [1, -1]) {
-    const r = new THREE.Mesh(boxGeo(W + 0.8, 0.16, slope, 2.5), roofMat);
-    r.position.set(cx, H + 0.2 + rise / 2, cz + s * (D / 4 + 0.25)); r.rotation.x = s * ang; r.castShadow = true; r.receiveShadow = true; scene.add(r);
-  }
-  const gable = new THREE.Shape(); gable.moveTo(-D / 2, 0); gable.lineTo(D / 2, 0); gable.lineTo(0, rise); gable.closePath();
-  for (const s of [1, -1]) {
-    const gg = new THREE.ShapeGeometry(gable), uv = gg.attributes.uv;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, gg.attributes.position.getX(i) / 2.5, gg.attributes.position.getY(i) / 2.5);
-    const gm = new THREE.Mesh(withUv2(gg), wallMat); gm.position.set(cx + s * W / 2, H + 0.2, cz); gm.rotation.y = s * Math.PI / 2; scene.add(gm);
+  // Obergeschoss und Dach (Kulisse, nicht begehbar) – jedes Haus anders, für alle Spieler gleich:
+  // Bungalow (Walm- oder Flachdach) · 1½ Etagen (Kniestock, steiles Satteldach, Gaube) · 2 Etagen (Sattel-, Giebel-zur-Straße- oder Walmdach)
+  const HH = HM(), kind = srand(), rc = ROOF_COL[['red', 'red', 'terra', 'anth', 'brown', 'slate'][Math.floor(srand() * 6)]], D0 = { decor: true, round: 0, shadow: false };
+  const rotF = face > 0 ? 0 : Math.PI, rotB = face > 0 ? Math.PI : 0;
+  const win2 = (x, z, rot, y, out) => { tkSign(x, y, z, 1.3, 1.3, rot, HH.win); addBox(x, y - 0.74, z + out, 1.6, 0.08, 0.22, TKM.white, 1, D0); };   // Fenster + Fensterbank
+  let top = H + 0.2, rise = 0;
+  if (kind < 0.15) {   // Bungalow
+    if (srand() < 0.5) { rise = 1.7; slopeRoof(cx, top, cz, W + 0.9, D + 0.9, (D + 0.9) / 2, (D + 0.9) / 2, rise, rc); }
+    else { for (const [x, z, w, d] of [[cx, cz - D / 2, W + 0.3, 0.25], [cx, cz + D / 2, W + 0.3, 0.25], [cx - W / 2, cz, 0.25, D], [cx + W / 2, cz, 0.25, D]]) vcBox(x, top, z, w, 0.6, d, '#e9e6de');
+      addBox(cx, top, cz, W - 0.2, 0.05, D - 0.2, TKM.gravel, 3, { decor: true, round: 0, shadow: false }); }
+  } else if (kind < 0.5) {   // 1½ Etagen: Kniestock, steiles Satteldach (First entlang der Straße), Gaube zur Straße
+    addBox(cx, top, cz, W, 1.0, D, wallMat, 2, { round: 0 }); top += 1.0; rise = D * 0.6;
+    gableRoof(cx, top, cz, W, D, true, rise, rc, wallMat, 0.45);
+    const gx = cx - 2.2, gz = fz + face * 0.1;   // Gaube: Körper, Dach, Fenster
+    vcBox(gx, top + 0.2, gz - face * 1.1, 2.0, 1.8, 2.0, '#efece4'); vcBox(gx, top + 2.0, gz - face * 1.05, 2.3, 0.14, 2.3, rc, { mat: HH.roof });
+    win2(gx, fz + face * 0.015, rotF, top + 1.1, face * 0.1);
+  } else {   // 2 Etagen
+    addBox(cx, top, cz, W, 2.8, D, wallMat, 2, { round: 0 });
+    for (const a of [cx - 3.3, cx - 0.9, cx + 1.65, cx + 3.6]) win2(a, fz + face * 0.015, rotF, top + 1.45, face * 0.1);
+    for (const a of [cx - 3.2, cx + 0.4, cx + 3.4]) win2(a, bzW - face * 0.015, rotB, top + 1.45, -face * 0.1);
+    for (const s of [-1, 1]) { tkSign(cx + s * (W / 2 + 0.015), top + 1.45, cz, 1.3, 1.3, s * Math.PI / 2, HH.win); }
+    addBox(cx, top + 2.8, cz, W + 0.25, 0.2, D + 0.25, TKM.white, 1, D0); top += 3.0;
+    const r = srand();
+    if (r < 0.4) { rise = D * 0.36; gableRoof(cx, top, cz, W, D, true, rise, rc, wallMat); }
+    else if (r < 0.7) { rise = W * 0.3; gableRoof(cx, top, cz, W, D, false, rise, rc, wallMat); }   // Giebel zur Straße
+    else { rise = D * 0.4; slopeRoof(cx, top, cz, W + 0.9, D + 0.9, (D + 0.9) / 2, (D + 0.9) / 2, rise, rc); }
   }
   // offene Haustür (Türblatt nach innen gedreht) + Glas in den Fenstern
   addBox(cx + 1.05, 0, fz - face * 0.75, 0.06, 2.15, 1.25, TKM.wood, 0, { decor: true, round: 0 });
@@ -1494,9 +1509,9 @@ function weltHouse(cx, cz, face, wallMat, roofMat = TKM.roofTile) {
   for (const a of [cx - 3.2, cx + 0.4]) addBox(a, 0.8, bzW - face * 0.1, 1.65, 0.08, 0.22, TKM.white, 1, DEC);
   addBox(cx + 1.65, 2.3, fz + face * 0.55, 2.0, 0.1, 1.1, roofMat, 2.5, { decor: true, round: 0 });
   for (const s of [-1, 1]) addBox(cx + 1.65 + s * 0.9, 2.12, fz + face * 1.0, 0.06, 0.18, 0.06, MAT.metal, 1, DEC);
-  const chH = D * 0.38 + 1.0;
-  addBox(cx - 2.6, H + 0.2, cz - face * 1.3, 0.62, chH, 0.62, MAT.brick, 1, { decor: true, round: 0 });
-  addBox(cx - 2.6, H + 0.2 + chH, cz - face * 1.3, 0.78, 0.1, 0.78, MAT.dark, 1, DEC);
+  const chH = rise * 0.8 + 1.0;   // Schornstein passend zur Dachhöhe
+  addBox(cx - 2.6, top, cz - face * 1.3, 0.62, chH, 0.62, MAT.brick, 1, { decor: true, round: 0 });
+  addBox(cx - 2.6, top + chH, cz - face * 1.3, 0.78, 0.1, 0.78, MAT.dark, 1, DEC);
   // Wohnzimmer (vorne): Sofa, Couchtisch, Fernseher, Küchenzeile, Kühlschrank, Esstisch
   const lz = cz + face * D / 4, sz = cz - face * D / 4;
   addBox(cx - 3.3, 0, lz + face * 0.2, 2.2, 0.45, 0.9, srand() < 0.5 ? FURN.sofa : FURN.sofa2, 0, { round: 0.12 });
@@ -1638,72 +1653,249 @@ function facadeWindow(P, x, y, w, h, frame, o = {}) {
     g.fillStyle = frame; g.fillRect(x - 10, y + h + 5, w + 20, 6); P.h(x - 10, y + h + 5, w + 20, 6, 222); P.r(x - 10, y + h + 5, w + 20, 6, FRM.sill);
   }
 }
-function euFacade(base, frame, style) {
-  const s = 512, P = facadeCanvases(s), { g, ge } = P;
-  g.fillStyle = base; g.fillRect(0, 0, s, s);
-  if (style === 'brick') {   // Ziegelmauer mit vertieften Fugen
-    P.h(0, 0, s, s, 96);
+/* ---------- Häuser-Baukasten: Fassaden-Sammelbild (Atlas) ----------
+   Alle Stadthaus-Fassaden liegen in EINEM Bild (4 × 4 Felder, je 12,8 m × 12,8 m = 4 Fensterachsen × 4 Etagen):
+   14 verschiedene Fassaden (Altbau mit Giebeln, Rundbögen, Fensterläden, Ziegel, Klinker, 60er-Jahre, Plattenbau, Fachwerk)
+   und 2 Felder mit je 4 Ladenzeilen. Ein Material für alle Häuser → kaum mehr Zeichenaufrufe trotz großer Vielfalt. */
+const EU_N = 4, EU_CS = 512;
+// Rundbogenfenster mit Schlussstein, Kämpfer und Fensterbank
+function archWindow(P, x, y, w, h, frame, on) {
+  const { g, ge, gh, gr } = P, r = w / 2;
+  const path = (c, e) => { c.beginPath(); c.moveTo(x - e, y + h + e); c.lineTo(x - e, y + r); c.arc(x + r, y + r, r + e, Math.PI, 0); c.lineTo(x + w + e, y + h + e); c.closePath(); };
+  g.fillStyle = frame; path(g, 7); g.fill(); gh.fillStyle = 'rgb(170,170,170)'; path(gh, 7); gh.fill(); gr.fillStyle = FRM.frame; path(gr, 7); gr.fill();
+  g.fillStyle = on ? '#f1d89c' : '#202a33'; path(g, 0); g.fill(); gh.fillStyle = 'rgb(38,38,38)'; path(gh, 0); gh.fill(); gr.fillStyle = on ? FRM.lit : FRM.glass; path(gr, 0); gr.fill();
+  if (on) { ge.fillStyle = '#ffd890'; path(ge, 0); ge.fill(); }
+  else { const gd = g.createLinearGradient(x, y, x + w * 0.7, y + h); gd.addColorStop(0, 'rgba(190,210,230,.35)'); gd.addColorStop(0.5, 'rgba(255,255,255,0)'); g.fillStyle = gd; path(g, 0); g.fill(); }
+  g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(x, y + r, 4, h - r);
+  g.fillStyle = frame; g.fillRect(x, y + r - 2, w, 4); g.fillRect(x + r - 2, y + r, 4, h - r);
+  P.h(x, y + r - 2, w, 4, 150); P.h(x + r - 2, y + r, 4, h - r, 150); P.r(x, y + r - 2, w, 4, FRM.frame); P.r(x + r - 2, y + r, 4, h - r, FRM.frame);
+  g.fillStyle = frame; g.fillRect(x + r - 7, y - 13, 14, 17); P.h(x + r - 7, y - 13, 14, 17, 222); g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(x + r + 7, y - 11, 3, 15);   // Schlussstein
+  const sg = g.createLinearGradient(0, y + h + 11, 0, y + h + 60); sg.addColorStop(0, 'rgba(40,34,28,.16)'); sg.addColorStop(1, 'rgba(40,34,28,0)'); g.fillStyle = sg; g.fillRect(x - 4, y + h + 11, w + 8, 49);
+  g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(x - 9, y + h + 11, w + 18, 4);
+  g.fillStyle = frame; g.fillRect(x - 10, y + h + 5, w + 20, 6); P.h(x - 10, y + h + 5, w + 20, 6, 222); P.r(x - 10, y + h + 5, w + 20, 6, FRM.sill);
+}
+// Ladenzeile (eine Etage): Schaufenster mit Waren, Tür, dunkles Schildband oben
+function shopRow(P, rv, y0) {
+  const { g, ge } = P, s = 512, fh = s / 4, n = rv.n || 4, cw = s / n, frame = rv.frame, door = rv.door !== undefined ? rv.door : 1;
+  g.fillStyle = rv.base; g.fillRect(0, y0, s, fh);
+  for (let i = 0; i < 1500; i++) { g.fillStyle = `rgba(0,0,0,${Math.random() * 0.06})`; g.fillRect(Math.random() * s, y0 + Math.random() * fh, 2, 2); }
+  g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, y0 + 4, s, fh * 0.14); P.h(0, y0 + 4, s, fh * 0.14, 150);
+  for (let k = 0; k < n; k++) {
+    const x = k * cw + 9, w = cw - 18, y = y0 + fh * 0.22, h = fh * 0.74, lit = Math.random() < 0.5;
+    g.fillStyle = frame; g.fillRect(x - 4, y - 4, w + 8, h + 4); P.h(x - 4, y - 4, w + 8, h + 4, 160); P.r(x - 4, y - 4, w + 8, h + 4, FRM.metal);
+    const ig = g.createLinearGradient(0, y, 0, y + h); ig.addColorStop(0, lit ? '#efe2c2' : '#2a333c'); ig.addColorStop(1, lit ? '#a8977a' : '#161d24');
+    g.fillStyle = ig; g.fillRect(x, y, w, h); P.h(x, y, w, h, 60); P.r(x, y, w, h, FRM.glass);
+    if (lit) { const eg = ge.createLinearGradient(0, y, 0, y + h); eg.addColorStop(0, '#8a7a58'); eg.addColorStop(1, '#4a3e2a'); ge.fillStyle = eg; ge.fillRect(x, y, w, h); }
+    for (const sy of [0.32, 0.56, 0.8]) {
+      const yy = y + h * sy; g.fillStyle = lit ? 'rgba(70,55,40,.75)' : 'rgba(0,0,0,.45)'; g.fillRect(x + 4, yy, w - 8, 4);
+      for (let px = x + 7; px < x + w - 12; px += 7 + Math.random() * 9) { const ph = 8 + Math.random() * 16, hue = Math.random() * 360;
+        g.fillStyle = lit ? `hsl(${hue},55%,${45 + Math.random() * 20}%)` : `hsla(${hue},25%,22%,.8)`; g.fillRect(px, yy - ph, 5 + Math.random() * 4, ph); }
+    }
+    const gr = g.createLinearGradient(x, y, x + w, y + h); gr.addColorStop(0, 'rgba(200,215,235,.32)'); gr.addColorStop(0.45, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(x, y, w, h);
+    g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(x, y, w, 4);
+    if (k === door) { g.fillStyle = frame; g.fillRect(x + w * 0.62, y, 4, h); g.fillStyle = '#3a2a1c'; g.fillRect(x + w * 0.66, y + 4, w * 0.3, h - 4); P.h(x + w * 0.66, y + 4, w * 0.3, h - 4, 100); P.r(x + w * 0.66, y + 4, w * 0.3, h - 4, FRM.frame); }
+  }
+}
+// Eine Fassade malen (Feld 512 × 512 px): v = { style, base, frame, brick, accent, rows }
+function paintFacade(P, v) {
+  const s = 512, { g } = P, fh = s / 4, cw = s / 4, st = v.style, frame = v.frame || '#f1eee4';
+  if (st === 'shop') { for (let f = 0; f < 4; f++) shopRow(P, v.rows[f], f * fh); return; }
+  g.fillStyle = v.base; g.fillRect(0, 0, s, s);
+  const brick = st === 'brick' || st === 'klinker';
+  if (brick) {   // Mauerwerk mit vertieften Fugen, einzelne dunkel gebrannte Steine
+    const b = v.brick; P.h(0, 0, s, s, 96);
     for (let y = 0; y < s; y += 8) for (let x = (y / 8) % 2 ? -8 : 0; x < s; x += 16) {
-      const l = 0.82 + Math.random() * 0.3; g.fillStyle = `rgba(${150 * l | 0},${70 * l | 0},${52 * l | 0},1)`; g.fillRect(x + 1, y + 1, 14, 6);
-      P.h(x + 1, y + 1, 14, 6, 128 + (Math.random() * 14 | 0));
+      const l = (0.8 + Math.random() * 0.32) * (Math.random() < 0.07 ? 0.72 : 1);
+      g.fillStyle = `rgb(${b[0] * l | 0},${b[1] * l | 0},${b[2] * l | 0})`; g.fillRect(x + 1, y + 1, 14, 6); P.h(x + 1, y + 1, 14, 6, 128 + (Math.random() * 14 | 0));
     }
     P.r(0, 0, s, s, FRM.brick);
-  } else {   // Putz: feine Körnung, leicht fleckig
-    for (let i = 0; i < 9000; i++) { const v = 123 + Math.random() * 10 | 0; P.h(Math.random() * s, Math.random() * s, 2, 2, v); }
+  } else {   // Putz / Beton: feine Körnung, Flecken, Regenspuren
+    for (let i = 0; i < 9000; i++) P.h(Math.random() * s, Math.random() * s, 2, 2, 123 + Math.random() * 10 | 0);
     for (let i = 0; i < 40; i++) { const x = Math.random() * s, y = Math.random() * s, r = 20 + Math.random() * 60, gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,255,255'},.05)`); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x - r, y - r, 2 * r, 2 * r); }
+    if (st === 'platte') {   // Betonplatten: jede etwas anders, dunkle Fugen
+      for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) { g.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,255,255'},${0.03 + Math.random() * 0.05})`; g.fillRect(k * cw, r * fh, cw, fh); }
+      g.fillStyle = 'rgba(25,25,25,.5)';
+      for (let k = 0; k <= 4; k++) { g.fillRect(k * cw - 2, 0, 4, s); g.fillRect(0, k * fh - 2, s, 4); P.h(k * cw - 2, 0, 4, s, 92); P.h(0, k * fh - 2, s, 4, 92); }
+    }
+    for (let i = 0; i < 16; i++) { const x = Math.random() * s, w = 5 + Math.random() * 22, gd = g.createLinearGradient(0, 0, 0, s); gd.addColorStop(0, 'rgba(45,40,32,0)'); gd.addColorStop(0.5, `rgba(45,40,32,${0.03 + Math.random() * 0.05})`); gd.addColorStop(1, 'rgba(45,40,32,0)'); g.fillStyle = gd; g.fillRect(x, 0, w, s); }
   }
   speckle(g, s, 7000, '0,0,0', 0.06, 2); speckle(g, s, 2500, '255,255,255', 0.05, 2);
-  const fh = s / 4, cw = s / 4;
+  const lit = () => Math.random() < 0.16, cur = () => Math.random() < 0.35;
+  const loggia = [0, 1, 2, 3].map(() => Math.random() < 0.4);   // Plattenbau: Loggien übereinander
   for (let f = 0; f < 4; f++) {
     const y0 = f * fh;
-    if (style === 'shop') {   // Erdgeschoss: große Schaufenster mit Metallrahmen, Tür, dunkles Schildband oben
-      g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, y0 + 4, s, fh * 0.14); P.h(0, y0 + 4, s, fh * 0.14, 150);
-      for (let k = 0; k < 4; k++) {
-        const x = k * cw + 9, w = cw - 18, y = y0 + fh * 0.22, h = fh * 0.74, lit = Math.random() < 0.5;
-        g.fillStyle = frame; g.fillRect(x - 4, y - 4, w + 8, h + 4); P.h(x - 4, y - 4, w + 8, h + 4, 160); P.r(x - 4, y - 4, w + 8, h + 4, FRM.metal);
-        // Ladeninneres: warm beleuchtet (oder dunkel), Regale mit bunten Waren, Spiegelung auf der Scheibe
-        const ig = g.createLinearGradient(0, y, 0, y + h); ig.addColorStop(0, lit ? '#efe2c2' : '#2a333c'); ig.addColorStop(1, lit ? '#a8977a' : '#161d24');
-        g.fillStyle = ig; g.fillRect(x, y, w, h); P.h(x, y, w, h, 60); P.r(x, y, w, h, FRM.glass);
-        if (lit) { const eg = ge.createLinearGradient(0, y, 0, y + h); eg.addColorStop(0, '#8a7a58'); eg.addColorStop(1, '#4a3e2a'); ge.fillStyle = eg; ge.fillRect(x, y, w, h); }
-        for (const sy of [0.32, 0.56, 0.8]) {
-          const yy = y + h * sy; g.fillStyle = lit ? 'rgba(70,55,40,.75)' : 'rgba(0,0,0,.45)'; g.fillRect(x + 4, yy, w - 8, 4);
-          for (let px = x + 7; px < x + w - 12; px += 7 + Math.random() * 9) {
-            const ph = 8 + Math.random() * 16, hue = Math.random() * 360;
-            g.fillStyle = lit ? `hsl(${hue},55%,${45 + Math.random() * 20}%)` : `hsla(${hue},25%,22%,.8)`; g.fillRect(px, yy - ph, 5 + Math.random() * 4, ph);
-          }
-        }
-        const gr = g.createLinearGradient(x, y, x + w, y + h); gr.addColorStop(0, 'rgba(200,215,235,.32)'); gr.addColorStop(0.45, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(x, y, w, h);
-        g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(x, y, w, 4);
-        if (k === 1) { g.fillStyle = frame; g.fillRect(x + w * 0.62, y, 4, h); g.fillStyle = '#3a2a1c'; g.fillRect(x + w * 0.66, y + 4, w * 0.3, h - 4); P.h(x + w * 0.66, y + 4, w * 0.3, h - 4, 100); P.r(x + w * 0.66, y + 4, w * 0.3, h - 4, FRM.frame); }   // Tür
-      }
-      continue;
-    }
-    // Gesims zwischen den Etagen (vorstehend)
-    g.fillStyle = 'rgba(255,255,255,.22)'; g.fillRect(0, y0 + fh - 9, s, 5); g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, y0 + fh - 4, s, 4);
-    P.h(0, y0 + fh - 10, s, 7, 200); P.h(0, y0 + fh - 3, s, 2, 150);
+    if (st === 'deco' || st === 'plain' || st === 'arch' || st === 'shutter' || st === 'brick') {   // Gesims zwischen den Etagen
+      g.fillStyle = 'rgba(255,255,255,.22)'; g.fillRect(0, y0 + fh - 9, s, 5); g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, y0 + fh - 4, s, 4);
+      P.h(0, y0 + fh - 10, s, 7, 200); P.h(0, y0 + fh - 3, s, 2, 150);
+    } else if (st === 'klinker') { const dk = v.brick.map(c => c * 0.62 | 0); g.fillStyle = `rgb(${dk})`; g.fillRect(0, y0 + fh - 12, s, 7); P.h(0, y0 + fh - 12, s, 7, 152); }   // Zierband
+    else if (st === 'modern') { g.fillStyle = 'rgba(0,0,0,.16)'; g.fillRect(0, y0 + fh - 3, s, 3); P.h(0, y0 + fh - 3, s, 3, 110); }
     for (let k = 0; k < 4; k++) {
-      const w = cw * 0.4, h = fh * 0.5, x = k * cw + (cw - w) / 2, y = y0 + fh * 0.18;
-      if (style === 'deco') {   // Fensterverdachung (Dreiecksgiebel)
-        g.fillStyle = frame; g.fillRect(x - 10, y - 16, w + 20, 7); g.beginPath(); g.moveTo(x - 6, y - 16); g.lineTo(x + w / 2, y - 28); g.lineTo(x + w + 6, y - 16); g.fill();
-        P.h(x - 10, y - 16, w + 20, 7, 210); P.gh.fillStyle = 'rgb(195,195,195)'; P.gh.beginPath(); P.gh.moveTo(x - 6, y - 16); P.gh.lineTo(x + w / 2, y - 28); P.gh.lineTo(x + w + 6, y - 16); P.gh.fill();
-        g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(x - 10, y - 9, w + 20, 3);
+      const x0 = k * cw;
+      if (st === 'deco' || st === 'plain' || st === 'brick') {
+        const w = cw * 0.4, h = fh * 0.5, x = x0 + (cw - w) / 2, y = y0 + fh * 0.18;
+        if (st === 'deco') {   // Fensterverdachung (Dreiecksgiebel)
+          g.fillStyle = frame; g.fillRect(x - 10, y - 16, w + 20, 7); g.beginPath(); g.moveTo(x - 6, y - 16); g.lineTo(x + w / 2, y - 28); g.lineTo(x + w + 6, y - 16); g.fill();
+          P.h(x - 10, y - 16, w + 20, 7, 210); P.gh.fillStyle = 'rgb(195,195,195)'; P.gh.beginPath(); P.gh.moveTo(x - 6, y - 16); P.gh.lineTo(x + w / 2, y - 28); P.gh.lineTo(x + w + 6, y - 16); P.gh.fill();
+          g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(x - 10, y - 9, w + 20, 3);
+        }
+        facadeWindow(P, x, y, w, h, frame, { lit: lit(), curtain: cur() });
+      } else if (st === 'arch') {   // Gründerzeit: Rundbogenfenster, Lisenen zwischen den Achsen
+        g.fillStyle = 'rgba(255,255,255,.12)'; g.fillRect(x0 - 8, y0, 16, fh); P.h(x0 - 8, y0, 16, fh, 150); g.fillStyle = 'rgba(0,0,0,.12)'; g.fillRect(x0 + 8, y0, 3, fh);
+        const w = cw * 0.36, h = fh * 0.56; archWindow(P, x0 + (cw - w) / 2, y0 + fh * 0.17, w, h, frame, lit());
+      } else if (st === 'shutter') {   // Klappläden mit Lamellen
+        const w = cw * 0.34, h = fh * 0.54, x = x0 + (cw - w) / 2, y = y0 + fh * 0.17;
+        facadeWindow(P, x, y, w, h, frame, { lit: lit(), curtain: cur() });
+        for (const sx of [x - 8 - w * 0.5, x + w + 8]) {
+          g.fillStyle = v.accent; g.fillRect(sx, y - 4, w * 0.5, h + 8); P.h(sx, y - 4, w * 0.5, h + 8, 160); P.r(sx, y - 4, w * 0.5, h + 8, FRM.frame);
+          g.fillStyle = 'rgba(0,0,0,.22)'; for (let ly = y; ly < y + h; ly += 6) { g.fillRect(sx + 3, ly, w * 0.5 - 6, 2); P.h(sx + 3, ly, w * 0.5 - 6, 2, 135); }
+          g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(sx + w * 0.5, y - 2, 3, h + 6);
+        }
+      } else if (st === 'klinker') {   // schmale hohe Fenster, Sturz aus hochkant gestellten Ziegeln
+        const w = cw * 0.34, h = fh * 0.56, x = x0 + (cw - w) / 2, y = y0 + fh * 0.17, dk = v.brick.map(c => c * 0.72 | 0);
+        for (let bx = x - 8; bx < x + w + 8; bx += 6) { g.fillStyle = `rgb(${dk})`; g.fillRect(bx, y - 20, 5, 14); P.h(bx, y - 20, 5, 14, 140); }
+        facadeWindow(P, x, y, w, h, frame, { lit: lit(), curtain: cur() });
+      } else if (st === 'modern') {   // breite Fenster, farbige Brüstungsfelder, Jalousien
+        const w = cw * 0.72, h = fh * 0.44, x = x0 + (cw - w) / 2, y = y0 + fh * 0.2, on = lit();
+        g.fillStyle = v.accent; g.fillRect(x, y + h + 8, w, fh * 0.24); P.h(x, y + h + 8, w, fh * 0.24, 140); P.r(x, y + h + 8, w, fh * 0.24, FRM.frame);
+        facadeWindow(P, x, y, w, h, frame, { lit: on, mullion: false, sill: false });
+        g.fillStyle = frame; for (const t of [1 / 3, 2 / 3]) { g.fillRect(x + w * t - 2, y, 4, h); P.h(x + w * t - 2, y, 4, h, 150); P.r(x + w * t - 2, y, 4, h, FRM.frame); }
+        if (!on && Math.random() < 0.35) { const bh = h * (0.2 + Math.random() * 0.6); g.fillStyle = 'rgba(205,205,200,.85)'; g.fillRect(x, y, w, bh); P.r(x, y, w, bh, FRM.curtain); P.h(x, y, w, bh, 60); g.fillStyle = 'rgba(0,0,0,.12)'; for (let ly = y + 3; ly < y + bh; ly += 4) g.fillRect(x, ly, w, 1); }
+      } else if (st === 'platte') {
+        if (loggia[k]) {   // Loggia: tiefe Nische mit Balkontür, vorne farbige Brüstungsplatte
+          g.fillStyle = '#4a4c4e'; g.fillRect(x0 + 10, y0 + 10, cw - 20, fh - 14); P.h(x0 + 10, y0 + 10, cw - 20, fh - 14, 50);
+          facadeWindow(P, x0 + 20, y0 + 22, cw * 0.32, fh * 0.6, '#d8d8d4', { lit: lit(), mullion: false, sill: false });
+          facadeWindow(P, x0 + 32 + cw * 0.32, y0 + 22, cw * 0.3, fh * 0.34, '#d8d8d4', { lit: false, mullion: false, sill: false });
+          g.fillStyle = v.accent; g.fillRect(x0 + 10, y0 + fh * 0.58, cw - 20, fh * 0.42 - 4); P.h(x0 + 10, y0 + fh * 0.58, cw - 20, fh * 0.42 - 4, 150); P.r(x0 + 10, y0 + fh * 0.58, cw - 20, fh * 0.42 - 4, FRM.wall);
+        } else { const w = cw * 0.46, h = fh * 0.46; facadeWindow(P, x0 + (cw - w) / 2, y0 + fh * 0.22, w, h, '#e4e4e0', { lit: lit(), curtain: cur() }); }
+      } else if (st === 'timber') {   // Fachwerk: Ständer, Riegel, Streben, kleine Fenster
+        const B = 11, beam = v.accent, w = cw * 0.34, h = fh * 0.42, x = x0 + (cw - w) / 2, y = y0 + fh * 0.24;
+        const bm = (bx, by, bw, bh) => { g.fillStyle = beam; g.fillRect(bx, by, bw, bh); P.h(bx, by, bw, bh, 165); P.r(bx, by, bw, bh, FRM.frame); };
+        bm(x0, y0, B, fh); bm(x - B - 2, y0, B, fh); bm(x + w + 2, y0, B, fh); bm(x0, y0, cw, B); bm(x0, y0 + fh - B, cw, B); bm(x0, y + h + 10, cw, B * 0.8);
+        for (const [ax, ay, bx2, by2] of [[x0 + B, y0 + fh - B, x - B - 2, y0 + B * 2], [x + w + 2 + B, y0 + B * 2, x0 + cw, y0 + fh - B]]) {
+          for (const [c, col] of [[g, beam], [P.gh, 'rgb(165,165,165)'], [P.gr, FRM.frame]]) { c.strokeStyle = col; c.lineWidth = B; c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx2, by2); c.stroke(); }
+        }
+        facadeWindow(P, x, y, w, h, frame, { lit: lit(), curtain: cur(), sill: false });
       }
-      facadeWindow(P, x, y, w, h, frame, { lit: Math.random() < 0.16, curtain: Math.random() < 0.35 });
     }
   }
-  return facadeMats(P, { ei: 0.45 });
 }
+// Alle Felder des Sammelbilds (Reihenfolge = Feldnummer)
+const EU_DEFS = [
+  { style: 'deco', base: '#e8dcbc' }, { style: 'deco', base: '#d79a7e' }, { style: 'arch', base: '#d9c7a0' }, { style: 'arch', base: '#b8c8d3' },
+  { style: 'plain', base: '#e3c97e' }, { style: 'plain', base: '#e6c3b8' }, { style: 'shutter', base: '#efe0a8', accent: '#3f6b45' }, { style: 'shutter', base: '#c4d6c0', accent: '#6b4a32' },
+  { style: 'brick', base: '#9c4a36', brick: [150, 70, 52], gable: '#94503c' }, { style: 'klinker', base: '#4a3028', brick: [104, 56, 42], gable: '#5e3a2c' },
+  { style: 'klinker', base: '#a89470', brick: [204, 170, 108], frame: '#ffffff', gable: '#c4ac7c' }, { style: 'modern', base: '#e9e7e1', accent: '#4f7fa6', frame: '#3a3d40' },
+  { style: 'platte', base: '#b9b6ae', accent: '#d9894a' }, { style: 'timber', base: '#eee7d6', accent: '#4a3122', frame: '#f4f1ea' },
+  { style: 'shop', rows: [{ base: '#4b4d52', frame: '#202226' }, { base: '#e7e2d6', frame: '#3a3c40', n: 3 }, { base: '#5a3a26', frame: '#2a1a10', door: 2 }, { base: '#2f4a3a', frame: '#1a2a20', n: 3, door: 0 }] },
+  { style: 'shop', rows: [{ base: '#d8ccb0', frame: '#4a3a2a', door: 3 }, { base: '#1e1f22', frame: '#b8953a', n: 3 }, { base: '#2c3e5a', frame: '#dfe3e8' }, { base: '#7a3b2c', frame: '#e8e2d6', n: 3, door: 2 }] },
+];
+function euAtlas() {
+  const S = EU_N * EU_CS, P = facadeCanvases(S), ctx = [P.g, P.ge, P.gh, P.gr];
+  EU_DEFS.forEach((v, i) => {
+    const ox = (i % EU_N) * EU_CS, oy = Math.floor(i / EU_N) * EU_CS;
+    for (const c of ctx) { c.save(); c.beginPath(); c.rect(ox, oy, EU_CS, EU_CS); c.clip(); c.translate(ox, oy); }
+    paintFacade(P, v);
+    for (const c of ctx) c.restore();
+  });
+  return facadeMats(P, { ei: 0.45, clamp: true, cell: EU_CS });
+}
+/* ---------- Gemeinsame Hausteile: farbige Bauteile (Gesimse, Giebel, Balkone) und Dächer in je EINEM Material ---------- */
+let HMS = null;
+function HM() {
+  if (HMS) return HMS;
+  HMS = {
+    trim: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }),
+    roof: pbr('roof', 2.5, { mat: { vertexColors: true } }),
+    win: new THREE.MeshStandardMaterial({ roughness: 0.25, metalness: 0.1, envMapIntensity: 1.3, map: canvasTex((g, s) => {
+      g.fillStyle = '#efece4'; g.fillRect(0, 0, s, s); g.fillStyle = '#1e2832'; g.fillRect(10, 10, s - 20, s - 20);
+      const gd = g.createLinearGradient(10, 10, s * 0.8, s - 10); gd.addColorStop(0, 'rgba(200,215,235,.45)'); gd.addColorStop(0.5, 'rgba(255,255,255,0)'); g.fillStyle = gd; g.fillRect(10, 10, s - 20, s - 20);
+      g.fillStyle = 'rgba(232,226,210,.8)'; g.fillRect(12, 12, s / 2 - 16, s * 0.22);
+      g.fillStyle = '#efece4'; g.fillRect(s / 2 - 3, 10, 6, s - 20); g.fillRect(10, s * 0.38, s - 20, 5);
+    }, 128, false) }),
+  };
+  HMS.roof.userData.tile = 2.5;
+  return HMS;
+}
+// Dachfarben (Faktor auf das Ziegelfoto): rot, terrakotta, braun, schiefergrau, anthrazit
+const ROOF_COL = { red: [0.82, 0.76, 0.74], terra: [0.95, 0.68, 0.55], brown: [0.6, 0.47, 0.4], slate: [0.42, 0.45, 0.52], anth: [0.27, 0.28, 0.3] };
+const _lc = new THREE.Color();
+const linCol = c => Array.isArray(c) ? c : (_lc.set(c), [_lc.r, _lc.g, _lc.b]);
+function paintGeo(g, c) { const k = linCol(c), n = g.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) { a[i * 3] = k[0]; a[i * 3 + 1] = k[1]; a[i * 3 + 2] = k[2]; } g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; }
+function vcBox(x, y, z, w, h, d, c, o = {}) {
+  const m = new THREE.Mesh(paintGeo(boxGeo(w, h, d, o.tile || 2, 0), c), o.mat || HM().trim);
+  m.position.set(x, y + h / 2, z); if (o.rotX) m.rotation.x = o.rotX; if (o.rotZ) m.rotation.z = o.rotZ;
+  m.castShadow = o.shadow !== false; m.receiveShadow = true; scene.add(m);
+  if (o.solid) collider(x, y, z, w, h, d);
+  return m;
+}
+// Fassaden-Kasten mit Bild aus dem Sammelbild (Feld cell; vOff verschiebt um Etagen, z. B. für die Ladenzeilen)
+function atlasBox(x, y, z, w, h, d, cell, vOff = 0, opts = {}) {
+  const g = boxGeo(w, h, d, 12.8, 0), uv = g.attributes.uv, col = cell % EU_N, row = Math.floor(cell / EU_N), E = 1.5 / EU_CS;
+  for (let i = 0; i < uv.count; i++) {
+    const u = Math.min(1, uv.getX(i)), v = Math.min(1, uv.getY(i) + vOff);
+    uv.setXY(i, (col + E + u * (1 - 2 * E)) / EU_N, (EU_N - 1 - row + E + v * (1 - 2 * E)) / EU_N);
+  }
+  const m = new THREE.Mesh(g, euMats().atlas); m.position.set(x, y + h / 2, z); m.castShadow = opts.shadow !== false; m.receiveShadow = true; scene.add(m);
+  if (!opts.decor) collider(x, y, z, w, h, d);
+  return m;
+}
+// Walm-, Zelt- oder Mansarddach (schräge Flächen von einem Rechteck bx × bz nach innen um ix/iz, Höhe h)
+function slopeRoof(cx, y0, cz, bx, bz, ix, iz, h, c, cap = true) {
+  const tx = Math.max(0, bx / 2 - ix), tz = Math.max(0, bz / 2 - iz), pos = [], uv = [], T = 2.5;
+  const tri = (a, b, c2, ua, ub, uc) => {
+    const ny = (b[2] - a[2]) * (c2[0] - a[0]) - (b[0] - a[0]) * (c2[2] - a[2]);
+    if (ny < 0) { [b, c2] = [c2, b]; [ub, uc] = [uc, ub]; }
+    pos.push(...a, ...b, ...c2); uv.push(...ua, ...ub, ...uc);
+  };
+  const B = [[-bx / 2, -bz / 2], [bx / 2, -bz / 2], [bx / 2, bz / 2], [-bx / 2, bz / 2]], Tp = [[-tx, -tz], [tx, -tz], [tx, tz], [-tx, tz]];
+  for (let s = 0; s < 4; s++) {
+    const b0 = B[s], b1 = B[(s + 1) % 4], t0 = Tp[s], t1 = Tp[(s + 1) % 4], ex = b1[0] - b0[0], ez = b1[1] - b0[1], L = Math.hypot(ex, ez), ux = ex / L, uz = ez / L;
+    const U = p => ((p[0] - b0[0]) * ux + (p[1] - b0[1]) * uz) / T, V = Math.hypot(s % 2 ? ix : iz, h) / T;
+    const P0 = [b0[0], 0, b0[1]], P1 = [b1[0], 0, b1[1]], Q0 = [t0[0], h, t0[1]], Q1 = [t1[0], h, t1[1]];
+    tri(P0, P1, Q1, [U(b0), 0], [U(b1), 0], [U(t1), V]);
+    if (Math.hypot(t1[0] - t0[0], t1[1] - t0[1]) > 0.01) tri(P0, Q1, Q0, [U(b0), 0], [U(t1), V], [U(t0), V]);
+  }
+  if (cap && tx > 0.01 && tz > 0.01) { const q = Tp.map(p => [p[0], h, p[1]]), qu = Tp.map(p => [p[0] / T, p[1] / T]); tri(q[0], q[1], q[2], qu[0], qu[1], qu[2]); tri(q[0], q[2], q[3], qu[0], qu[2], qu[3]); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.computeVertexNormals(); withUv2(g); paintGeo(g, c);
+  const m = new THREE.Mesh(g, HM().roof); m.position.set(cx, y0, cz); m.castShadow = true; m.receiveShadow = true; scene.add(m); return m;
+}
+// Satteldach: First entlang x (ridgeX) oder z; gable = Material (Wand) oder Farbe für die Giebeldreiecke
+function gableRoof(cx, y0, cz, bx, bz, ridgeX, rise, rc, gable, o = 0.35) {
+  const H = HM(), span = ridgeX ? bz : bx, len = (ridgeX ? bx : bz) + 0.3, run = span / 2 + o, slope = Math.hypot(run, rise), ang = Math.atan2(rise, run);
+  for (const s of [1, -1]) {
+    const r = new THREE.Mesh(paintGeo(boxGeo(ridgeX ? len : slope, 0.16, ridgeX ? slope : len, 2.5, 0), rc), H.roof);
+    if (ridgeX) { r.position.set(cx, y0 + rise / 2, cz + s * run / 2); r.rotation.x = s * ang; } else { r.position.set(cx + s * run / 2, y0 + rise / 2, cz); r.rotation.z = -s * ang; }
+    r.castShadow = true; r.receiveShadow = true; scene.add(r);
+    vcBox(ridgeX ? cx : cx + s * (run + 0.02), y0 - 0.12, ridgeX ? cz + s * (run + 0.02) : cz, ridgeX ? len : 0.16, 0.14, ridgeX ? 0.16 : len, '#8a8f94', { shadow: false });   // Dachrinne
+  }
+  vcBox(cx, y0 + rise - 0.03, cz, ridgeX ? len + 0.02 : 0.3, 0.16, ridgeX ? 0.3 : len + 0.02, rc.map(v => v * 0.55), { mat: H.roof, shadow: false });   // First
+  const sh = new THREE.Shape(); sh.moveTo(-span / 2, 0); sh.lineTo(span / 2, 0); sh.lineTo(0, rise); sh.closePath();
+  for (const s of [1, -1]) {
+    const gg = new THREE.ShapeGeometry(sh), uv = gg.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, gg.attributes.position.getX(i) / 2.5, gg.attributes.position.getY(i) / 2.5);
+    withUv2(gg); let mat = gable;
+    if (!(gable && gable.isMaterial)) { paintGeo(gg, gable); mat = H.trim; }
+    const gm = new THREE.Mesh(gg, mat);
+    if (ridgeX) { gm.position.set(cx + s * bx / 2, y0, cz); gm.rotation.y = s * Math.PI / 2; } else { gm.position.set(cx, y0, cz + s * bz / 2); gm.rotation.y = s > 0 ? 0 : Math.PI; }
+    gm.receiveShadow = true; scene.add(gm);
+  }
+}
+// Haus-Familien (Gewicht w): welche Fassaden, wie viele Etagen, wie oft Läden, welche Dächer, Erker, Balkone, Gesimsfarbe, Dachfarben
+const EU_FAM = [
+  { k: 'altbau', w: 44, cells: [0, 1, 2, 3, 4, 5, 6, 7], floors: [3, 5], shop: 0.6, roofs: [['gable', 3], ['mansard', 3], ['hip', 1], ['flat', 1]], erker: 0.35, balc: 'rail', trim: '#f1eee4', rc: ['red', 'red', 'terra', 'slate', 'anth', 'brown'] },
+  { k: 'ziegel', w: 18, cells: [8, 9, 10], floors: [3, 5], shop: 0.5, roofs: [['gable', 4], ['flat', 2], ['hip', 1]], erker: 0.1, balc: 'rail', trim: '#ded6c8', rc: ['red', 'anth', 'brown'] },
+  { k: 'nachkrieg', w: 9, cells: [11], floors: [4, 6], shop: 0.5, roofs: [['flat', 3], ['setback', 2], ['hip', 1]], erker: 0, balc: 'solid', trim: '#d6d4ce', rc: ['anth', 'brown'] },
+  { k: 'platte', w: 6, cells: [12], floors: [5, 8], shop: 0.25, roofs: [['flat', 1]], erker: 0, balc: null, trim: '#a9a69f', rc: ['anth'] },
+  { k: 'fachwerk', w: 8, cells: [13], floors: [2, 3], shop: 0.4, roofs: [['steep', 1]], erker: 0, balc: null, trim: '#4a3122', rc: ['red', 'terra', 'brown'] },
+  { k: 'buero', w: 15, mats: ['office', 'tile', 'glassBlue', 'officeDark'], floors: [4, 8], shop: 0.85, roofs: [['flat', 2], ['setback', 1]], erker: 0, balc: null, trim: '#55585d', rc: ['anth'] },
+];
+const pickW = (arr, wf) => { let t = srand() * arr.reduce((a, x) => a + wf(x), 0); for (const x of arr) if ((t -= wf(x)) < 0) return x; return arr[arr.length - 1]; };
 let EU = null;
 function euMats() {
   if (EU) return EU;
-  const plain = hex => new THREE.MeshStandardMaterial({ color: new THREE.Color(hex), roughness: 0.9 });
-  // wenige Varianten: jede Variante ist ein eigenes Material und damit ein eigener Zeichenaufruf pro Kartenstück
-  const trim = plain('#f1eee4');
-  const F = (base, style) => ({ mat: euFacade(base, '#f1eee4', style), gable: plain(style === 'brick' ? '#94503c' : base), trim });
   EU = {
-    facades: [F('#e8dcbc', 'deco'), F('#e3c97e', 'plain'), F('#d79a7e', 'deco'), F('#b8c8d3', 'plain'), F('#9c4a36', 'brick')],
-    shops: [euFacade('#4b4d52', '#202226', 'shop'), euFacade('#e7e2d6', '#3a3c40', 'shop')],
-    roofs: [TKM.roofTile, MAT.roof, pbr('roof', 2.5, { mat: { color: new THREE.Color(0.75, 0.38, 0.28) } })],
+    atlas: euAtlas(),   // alle Fassaden in einem Sammelbild (siehe oben)
     awn: [MAT.ctrRed, MAT.ctrGreen, MAT.ctrBlue, MAT.ctrOrange],
     pave: new THREE.MeshStandardMaterial({ map: canvasTex((g, s) => {
       g.fillStyle = '#6a6862'; g.fillRect(0, 0, s, s);
@@ -1749,64 +1941,107 @@ let euShopN = 0; const EU_SIGN = {};
 /* Altbau-Stadthaus (nicht begehbar) an der Straße: Läden im Erdgeschoss, Fassade, Gesims, Balkone, Sattel- oder Flachdach.
    alongX = Front verläuft entlang x (Straße an z-Seite), face = Richtung der Straße (+1/-1). w = Breite an der Straße, d = Tiefe */
 function euHouse(cx, cz, w, d, floors, alongX, face) {
-  const E = euMats(), F = E.facades[Math.floor(srand() * E.facades.length)], shop = srand() < 0.6;
-  const bx = alongX ? w : d, bz = alongX ? d : w, top = floors * FLOOR_H, NRD = { round: 0 };
-  addBox(cx, 0, cz, bx, FLOOR_H, bz, shop ? E.shops[Math.floor(srand() * E.shops.length)] : F.mat, 12.8, NRD);
-  addBox(cx, FLOOR_H, cz, bx, top - FLOOR_H, bz, F.mat, 12.8, NRD);
-  addBox(cx, FLOOR_H - 0.12, cz, bx + 0.16, 0.24, bz + 0.16, F.trim, 2, { decor: true, round: 0, shadow: false });   // Band über dem Erdgeschoss
-  addBox(cx, 0, cz, bx + 0.1, shop ? 0.22 : 0.55, bz + 0.1, E.plinth, 1, { decor: true, round: 0, shadow: false });   // Sockel
-  addBox(cx, top, cz, bx + 0.45, 0.4, bz + 0.45, F.trim, 2, { decor: true, round: 0 });                            // Kranzgesims / Dachkante
-  // Front-Hilfen: Punkt auf der Fassade zur Straße, Richtung entlang der Fassade
+  const E = euMats(), H = HM(), Fm = pickW(EU_FAM, f => f.w);
+  floors = Fm.floors[0] + Math.floor(srand() * (Fm.floors[1] - Fm.floors[0] + 1));
+  const cell = Fm.cells ? Fm.cells[Math.floor(srand() * Fm.cells.length)] : -1, tkMat = Fm.mats ? TKM[Fm.mats[Math.floor(srand() * Fm.mats.length)]] : null;
+  const def = cell >= 0 ? EU_DEFS[cell] : null, trim = Fm.trim, gableCol = def ? (def.gable || def.base) : trim;
+  const roofT = pickW(Fm.roofs, r => r[1])[0], rc = ROOF_COL[Fm.rc[Math.floor(srand() * Fm.rc.length)]], shop = srand() < Fm.shop;
+  const bx = alongX ? w : d, bz = alongX ? d : w;
+  const setback = roofT === 'setback' && floors >= 4, mainF = setback ? floors - 1 : floors, top = mainF * FLOOR_H;
+  // Fassade (Feld aus dem Sammelbild oder Büro-Fassade) in Stücken zu höchstens 4 Etagen
+  const block = (x, y, z, bw, nF, bd) => {
+    for (let f = 0; f < nF; f += 4) { const n = Math.min(4, nF - f);
+      if (tkMat) addBox(x, y + f * FLOOR_H, z, bw, n * FLOOR_H, bd, tkMat, 16, { round: 0 }); else atlasBox(x, y + f * FLOOR_H, z, bw, n * FLOOR_H, bd, cell); }
+  };
+  if (shop) { const sd = Math.floor(srand() * 8); atlasBox(cx, 0, cz, bx, FLOOR_H, bz, 14 + (sd >> 2), (3 - (sd & 3)) * 0.25); }   // eine von 8 Ladenzeilen
+  else block(cx, 0, cz, bx, 1, bz);
+  block(cx, FLOOR_H, cz, bx, mainF - 1, bz);
+  vcBox(cx, FLOOR_H - 0.12, cz, bx + 0.16, 0.24, bz + 0.16, trim, { shadow: false });                                    // Band über dem Erdgeschoss
+  addBox(cx, 0, cz, bx + 0.1, shop ? 0.22 : 0.55, bz + 0.1, E.plinth, 1, { decor: true, round: 0, shadow: false });     // Sockel
+  // Front-Hilfen: Punkt auf der Fassade zur Straße (u entlang der Fassade, out nach außen)
   const fx = alongX ? 0 : face, fz = alongX ? face : 0, ax = alongX ? 1 : 0, az = alongX ? 0 : 1, half = d / 2;
-  const at = (u, out, y, W, H, D, mat, o = {}) => addBox(cx + fx * (half + out) + ax * u, y, cz + fz * (half + out) + az * u,
-    alongX ? W : D, H, alongX ? D : W, mat, 1, Object.assign({ decor: true, round: 0, shadow: false }, o));
+  const P = (u, out) => [cx + fx * (half + out) + ax * u, cz + fz * (half + out) + az * u];
+  const at = (u, out, y, W, Hh, D, mat, o = {}) => { const [x, z] = P(u, out); return addBox(x, y, z, alongX ? W : D, Hh, alongX ? D : W, mat, 1, Object.assign({ decor: true, round: 0, shadow: false }, o)); };
+  const atv = (u, out, y, W, Hh, D, col, o = {}) => { const [x, z] = P(u, out); return vcBox(x, y, z, alongX ? W : D, Hh, alongX ? D : W, col, Object.assign({ shadow: false }, o)); };
+  const atw = (u, out, y, W, Hh) => { const [x, z] = P(u, out); return tkSign(x, y, z, W, Hh, alongX ? (face > 0 ? 0 : Math.PI) : (face > 0 ? Math.PI / 2 : -Math.PI / 2), H.win); };
+  let doorAxis = -1;
   if (shop) {   // Markise + Ladenschild
     const awn = E.awn[Math.floor(srand() * E.awn.length)];
-    at(0, 0.7, 2.55, w - 0.6, 0.12, 1.4, awn, { shadow: true });
+    if (srand() < 0.75) at(0, 0.7, 2.55, w - 0.6, 0.12, 1.4, awn, { shadow: true });
     const n = euShopN++ % EU_SHOPS.length, name = EU_SHOPS[n], col = TK_COLORS[n % TK_COLORS.length];
     const rot = alongX ? (face > 0 ? 0 : Math.PI) : (face > 0 ? Math.PI / 2 : -Math.PI / 2);
-    const sm = EU_SIGN[name] || (EU_SIGN[name] = tkSignMat(name, col[0], col[1], false));   // gleiches Schild = gleiches Material
+    const sm = EU_SIGN[name] || (EU_SIGN[name] = tkSignMat(name, col[0], col[1], false));
     tkSign(cx + fx * (half + 0.05), 2.95, cz + fz * (half + 0.05), Math.min(w - 1, 6), 0.55, rot, sm);
   } else {   // Wohnhaus: Haustür mit Stufe und Lampe
-    const du = w > 4 ? -w / 2 + 1.6 + Math.floor(srand() * Math.max(1, Math.round(w / 3.2) - 1)) * 3.2 : 0;
+    const k = w > 4 ? Math.floor(srand() * Math.max(1, Math.round(w / 3.2) - 1)) : 0, du = w > 4 ? -w / 2 + 1.6 + k * 3.2 : 0; doorAxis = k;
     at(du, 0.03, 0, 1.15, 2.3, 0.06, E.door);
-    at(du, 0.4, 0, 1.8, 0.16, 0.8, F.trim, { shadow: false });
+    atv(du, 0.4, 0, 1.8, 0.16, 0.8, trim);
     at(du + 0.85, 0.08, 2.35, 0.14, 0.2, 0.14, LAMP_MAT);
   }
   at(w / 2 - 0.14, 0.07, 0, 0.1, top + 0.3, 0.1, E.pipe);   // Regenfallrohr an der Hausecke
-  // Balkone an manchen Fensterachsen (Achsen liegen bei 1,6 + k·3,2 m vom Rand)
-  const axes = Math.round(w / 3.2);
-  for (let f = 1; f < floors; f++) for (let k = 0; k < axes; k++) {
-    if (srand() > 0.22) continue;
-    const u = -w / 2 + 1.6 + k * 3.2, y = f * FLOOR_H + 0.05;
-    at(u, 0.5, y, 2.2, 0.14, 1.0, F.trim);
-    at(u, 0.97, y + 0.14, 2.2, 0.9, 0.03, E.rail);                                  // Geländer vorne
-    for (const sd of [-1, 1]) at(u + sd * 1.09, 0.5, y + 0.14, 0.03, 0.9, 0.95, E.rail);   // Geländer seitlich
+  const axes = Math.round(w / 3.2), used = new Set();
+  // Erker (Altbau): über mehrere Etagen vorspringend, oben Balkon mit Geländer
+  if (Fm.erker && mainF >= 3 && axes >= 3 && srand() < Fm.erker) {
+    const k = 1 + Math.floor(srand() * (axes - 2)), u = -w / 2 + 1.6 + k * 3.2, nF = Math.min(4, mainF - 2), [ex, ez] = P(u, 0.45), yTop = FLOOR_H + nF * FLOOR_H;
+    atlasBox(ex, FLOOR_H, ez, alongX ? 3.2 : 0.9, nF * FLOOR_H, alongX ? 0.9 : 3.2, cell, 0, { decor: true });
+    atv(u, 0.45, FLOOR_H - 0.3, 3.0, 0.3, 0.8, trim, { shadow: true });   // Konsole
+    atv(u, 0.5, yTop, 3.4, 0.18, 1.1, trim, { shadow: true });            // Abdeckung
+    at(u, 1.03, yTop + 0.18, 3.3, 0.9, 0.03, E.rail); for (const sd of [-1, 1]) at(u + sd * 1.64, 0.55, yTop + 0.18, 0.03, 0.9, 0.95, E.rail);
+    used.add(k);
   }
-  // Dach
-  if (srand() < 0.6) {
-    const roof = E.roofs[Math.floor(srand() * E.roofs.length)], rise = d * 0.3, run = d / 2 + 0.35, slope = Math.hypot(run, rise), ang = Math.atan2(rise, run), y0 = top + 0.4;
-    for (const s of [1, -1]) {
-      const r = new THREE.Mesh(boxGeo(alongX ? bx + 0.3 : slope, 0.16, alongX ? slope : bz + 0.3, 2.5), roof);
-      if (alongX) { r.position.set(cx, y0 + rise / 2, cz + s * run / 2); r.rotation.x = s * ang; }
-      else { r.position.set(cx + s * run / 2, y0 + rise / 2, cz); r.rotation.z = -s * ang; }
-      r.castShadow = true; r.receiveShadow = true; scene.add(r);
-      // Dachrinne an der Traufe
-      if (alongX) addBox(cx, y0 - 0.12, cz + s * (run + 0.02), bx + 0.3, 0.14, 0.16, E.pipe, 1, { decor: true, round: 0, shadow: false });
-      else addBox(cx + s * (run + 0.02), y0 - 0.12, cz, 0.16, 0.14, bz + 0.3, E.pipe, 1, { decor: true, round: 0, shadow: false });
+  // Balkone: Altbau mit Eisengeländer (einzeln), Nachkriegsbau mit Betonbrüstung (übereinander)
+  if (Fm.balc === 'rail') for (let f = 1; f < mainF; f++) for (let k = 0; k < axes; k++) {
+    if (used.has(k) || srand() > 0.22) continue;
+    const u = -w / 2 + 1.6 + k * 3.2, y = f * FLOOR_H + 0.05;
+    atv(u, 0.5, y, 2.2, 0.14, 1.0, trim, { shadow: true });
+    at(u, 0.97, y + 0.14, 2.2, 0.9, 0.03, E.rail);
+    for (const sd of [-1, 1]) at(u + sd * 1.09, 0.5, y + 0.14, 0.03, 0.9, 0.95, E.rail);
+  } else if (Fm.balc === 'solid') for (let k = 0; k < axes; k++) {
+    if (srand() > 0.4) continue;
+    const u = -w / 2 + 1.6 + k * 3.2;
+    for (let f = 1; f < mainF; f++) { const y = f * FLOOR_H;
+      atv(u, 0.65, y, 2.8, 0.18, 1.3, trim, { shadow: true }); atv(u, 1.25, y + 0.18, 2.8, 1.0, 0.1, trim);
+      for (const sd of [-1, 1]) atv(u + sd * 1.35, 0.65, y + 0.18, 0.1, 1.0, 1.2, trim); }
+  }
+  // Flachdach: Attika (Brüstung), Kies, Technik
+  const flatTop = (x, y, z, bw, bd) => {
+    const t = 0.25, hh = 0.8;
+    vcBox(x, y, z - bd / 2 + t / 2, bw, hh, t, trim); vcBox(x, y, z + bd / 2 - t / 2, bw, hh, t, trim);
+    vcBox(x - bw / 2 + t / 2, y, z, t, hh, bd - 2 * t, trim); vcBox(x + bw / 2 - t / 2, y, z, t, hh, bd - 2 * t, trim);
+    addBox(x, y, z, bw - 2 * t, 0.06, bd - 2 * t, TKM.gravel, 3, { decor: true, round: 0, shadow: false });
+    addBox(x + srnd(-bw / 4, bw / 4), y, z + srnd(-bd / 4, bd / 4), 1.6, 1.0, 1.2, MAT.metal, 1, { decor: true, round: 0.03 });
+    if (srand() < 0.5) addBox(x + srnd(-bw / 4, bw / 4), y, z + srnd(-bd / 4, bd / 4), 0.5, 1.4, 0.5, MAT.hallMetal, 1, { decor: true, round: 0 });
+  };
+  const chimney = (y0, h) => addBox(cx + (alongX ? srnd(-w / 3, w / 3) : -face * d / 5), y0, cz + (alongX ? -face * d / 5 : srnd(-w / 3, w / 3)), 0.6, h, 0.6, MAT.brick, 1, { decor: true, round: 0 });
+  const dormers = (y0, out) => { for (let k = 0; k < axes; k++) { if (srand() < 0.25) continue; const u = -w / 2 + 1.6 + k * 3.2;   // Gauben zur Straße
+    atv(u, out - 0.7, y0, 1.5, 1.9, 1.4, trim, { shadow: true }); atv(u, out - 0.65, y0 + 1.9, 1.75, 0.14, 1.6, rc, { mat: H.roof, shadow: true }); atw(u, out + 0.015, y0 + 0.95, 1.0, 1.3); } };
+  if (roofT === 'flat' || setback) {
+    if (setback) {   // oberstes Geschoss 1,8 m zurückgesetzt, davor Dachterrasse mit Geländer
+      vcBox(cx, top, cz, bx + 0.1, 0.3, bz + 0.1, trim);
+      block(cx - fx * 0.9, top + 0.3, cz - fz * 0.9, alongX ? bx : bx - 1.8, 1, alongX ? bz - 1.8 : bz);
+      at(0, -0.15, top + 0.3, w - 0.3, 0.9, 0.03, E.rail);
+      flatTop(cx - fx * 0.9, top + 0.3 + FLOOR_H, cz - fz * 0.9, alongX ? bx : bx - 1.8, alongX ? bz - 1.8 : bz);
+    } else flatTop(cx, top, cz, bx + 0.1, bz + 0.1);
+  } else {
+    vcBox(cx, top, cz, bx + 0.45, 0.4, bz + 0.45, trim);   // Kranzgesims
+    const y0 = top + 0.4;
+    if (roofT === 'gable' || roofT === 'steep') {
+      const rise = d * (roofT === 'steep' ? 0.58 : 0.28 + srand() * 0.2);
+      gableRoof(cx, y0, cz, bx, bz, alongX, rise, rc, gableCol);
+      if (roofT === 'steep' && srand() < 0.6) dormers(y0 + 0.4, 0);
+      if (srand() < 0.6) chimney(y0, rise * 0.75 + 0.9);
+    } else if (roofT === 'hip') {
+      const m = Math.min(bx, bz) + 0.6, rise = m * 0.34;
+      slopeRoof(cx, y0, cz, bx + 0.6, bz + 0.6, m / 2, m / 2, rise, rc);
+      if (srand() < 0.6) chimney(y0, rise * 0.8 + 0.9);
+    } else {   // Mansarddach: steiler Unterteil (mit Gauben), flacher Oberteil
+      const lo = [rc, ROOF_COL.slate, ROOF_COL.anth][Math.floor(srand() * 3)];
+      slopeRoof(cx, y0, cz, bx + 0.3, bz + 0.3, 1.0, 1.0, 2.9, lo, false);
+      const m = Math.min(bx, bz) - 1.7;
+      slopeRoof(cx, y0 + 2.9, cz, bx - 1.7, bz - 1.7, m / 2, m / 2, 1.1, lo);
+      dormers(y0 + 0.5, 0.05);
+      if (srand() < 0.5) chimney(y0 + 2.9, 1.6);
     }
-    addBox(cx, y0 + rise - 0.02, cz, alongX ? bx + 0.32 : 0.3, 0.16, alongX ? 0.3 : bz + 0.32, E.ridge, 1, { decor: true, round: 0, shadow: false });   // First
-    const gable = new THREE.Shape(); gable.moveTo(-d / 2, 0); gable.lineTo(d / 2, 0); gable.lineTo(0, rise); gable.closePath();
-    for (const s of [1, -1]) {
-      const gm = new THREE.Mesh(withUv2(new THREE.ShapeGeometry(gable)), F.gable);
-      if (alongX) { gm.position.set(cx + s * bx / 2, y0, cz); gm.rotation.y = s * Math.PI / 2; }
-      else { gm.position.set(cx, y0, cz + s * bz / 2); gm.rotation.y = s > 0 ? 0 : Math.PI; }
-      scene.add(gm);
-    }
-    if (srand() < 0.6) addBox(cx + (alongX ? srnd(-w / 3, w / 3) : -face * d / 5), y0, cz + (alongX ? -face * d / 5 : srnd(-w / 3, w / 3)), 0.6, rise * 0.75 + 0.9, 0.6, MAT.brick, 1, { decor: true, round: 0 });   // Schornstein
-  } else {   // Flachdach mit Technik
-    addBox(cx + srnd(-bx / 4, bx / 4), top + 0.4, cz + srnd(-bz / 4, bz / 4), 1.6, 1.0, 1.2, MAT.metal, 1, { decor: true, round: 0.03 });
-    if (srand() < 0.5) addBox(cx + srnd(-bx / 4, bx / 4), top + 0.4, cz + srnd(-bz / 4, bz / 4), 0.5, 1.4, 0.5, MAT.hallMetal, 1, { decor: true, round: 0 });
   }
 }
 // Häuserzeile in einer Lücke [a0, a1] entlang einer Straße: Breiten in Vielfachen von 3,2 m, mittig ausgerichtet
@@ -3544,6 +3779,7 @@ let CULL_DIST = 250;
     if (!merged) continue;
     const m = new THREE.Mesh(merged, e.mat);
     m.castShadow = e.cast; m.receiveShadow = true;
+    if (e.mat.isMeshStandardMaterial && !(e.mat.defines && 'GROUND_AO' in e.mat.defines)) { e.mat.defines = Object.assign({}, e.mat.defines, { GROUND_AO: '' }); e.mat.needsUpdate = true; }   // Kontaktschatten (core.js)
     if (CHUNK && !e.big) { merged.computeBoundingSphere(); m.userData.cull = merged.boundingSphere; }
     scene.add(m); mapMeshes.push(m);
   }
