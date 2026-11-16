@@ -10,9 +10,36 @@
   let SDK = null, playing = false, adBusy = false, lastEnd = false, room = null;
   const mute = on => { try { if (master) master.gain.value = on ? 0 : volume; } catch (e) {} };
   const muteWanted = () => adBusy || (SDK && SDK.game.settings && SDK.game.settings.muteAudio);
+  // Spielstand (Münzen, Waffen, Tuning, Einstellungen …) zusätzlich im CrazyGames-Datenmodul speichern:
+  // so bleibt der Fortschritt beim CrazyGames-Konto, auch auf einem anderen Gerät. Alles „kz_…“ aus dem Browser-Speicher
+  // wird als ein Paket abgelegt (Schlüssel „kz_save“).
+  const SAVE = 'kz_save';
+  let sync = false, pushT = 0;
+  const snap = () => { const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('kz_') === 0) o[k] = localStorage.getItem(k); } return o; };
+  const push = () => { if (!sync) return; clearTimeout(pushT); pushT = setTimeout(() => { try { SDK.data.setItem(SAVE, JSON.stringify(snap())); } catch (e) {} }, 800); };
+  const oSet = Storage.prototype.setItem, oDel = Storage.prototype.removeItem;
+  Storage.prototype.setItem = function (k, v) { oSet.call(this, k, v); if (this === localStorage && String(k).indexOf('kz_') === 0) push(); };
+  Storage.prototype.removeItem = function (k) { oDel.call(this, k); if (this === localStorage && String(k).indexOf('kz_') === 0) push(); };
+  function loadSave() {
+    if (!SDK.data) return;
+    let cloud = null; try { cloud = JSON.parse(SDK.data.getItem(SAVE) || 'null'); } catch (e) {}
+    if (cloud && typeof cloud === 'object') {
+      let changed = false;
+      for (const k in cloud) if (k.indexOf('kz_') === 0 && typeof cloud[k] === 'string' && localStorage.getItem(k) !== cloud[k]) { oSet.call(localStorage, k, cloud[k]); changed = true; }
+      if (changed) {
+        // Spielstand von CrazyGames ist anders als hier → einmal neu laden, damit das Spiel ihn übernimmt
+        let again = false; try { again = sessionStorage.getItem('kz_cgsync') === '1'; sessionStorage.setItem('kz_cgsync', '1'); } catch (e) { again = true; }
+        if (!running && !again) { location.reload(); return 'reload'; }   // höchstens einmal pro Besuch (keine Endlosschleife)
+        if (again) { sync = true; push(); }
+        return;   // schon im Spiel: nichts überschreiben, der gespeicherte Stand bleibt bis zum nächsten Laden erhalten
+      }
+    }
+    sync = true; push();
+  }
   const s = document.createElement('script'); s.src = 'https://sdk.crazygames.com/crazygames-sdk-v3.js';
   s.onload = async () => {
     try { await window.CrazyGames.SDK.init(); SDK = window.CrazyGames.SDK; } catch (e) { return; }
+    try { if (loadSave() === 'reload') return; } catch (e) {}
     try { SDK.game.loadingStart(); } catch (e) {}
     try { SDK.game.addSettingsChangeListener(() => mute(muteWanted())); } catch (e) {}
     // Benutzername übernehmen
