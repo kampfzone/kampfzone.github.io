@@ -251,7 +251,7 @@ const KB_ACTIONS = [
   ['trackStart', 'Zur Startlinie (Rennstrecke)', ['KeyT', ''], null],
   ['tune', 'Tuning-Menü (im Auto)', ['KeyU', ''], null],
   ['nitro', 'Nitro zünden (im Auto)', ['KeyN', ''], null],
-  ['talk', 'Sprechen (Sprachchat, halten)', ['KeyB', ''], 'Talk'],
+  ['talk', 'Sprachchat: Mikro an/aus', ['KeyB', ''], 'Talk'],
 ];
 const KB_DEFAULT = () => Object.fromEntries(KB_ACTIONS.map(a => [a[0], a[2].slice()]));
 let KB = KB_DEFAULT(), KB_LABEL = {};
@@ -283,6 +283,7 @@ function kbDown(a, repeat) {
   if (!locked) return;
   if (KB_HOLD[a]) keys[KB_HOLD[a]] = true;
   if (repeat) return;
+  if (a === 'talk' && window.voiceKey) window.voiceKey();   // Sprachchat: Mikro an/aus (voice.js)
   if (a === 'forward') { const t = performance.now(); if (t - lastWTap < 300) me.sprintTap = true; lastWTap = t; }   // doppelt tippen = sprinten
   else if (a === 'crouch') startCrouch();
   else if (a === 'fire') { me.trigger = true; me.firedPress = false; }

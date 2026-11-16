@@ -6,9 +6,14 @@
    Das Mikrofon wird erst beim ersten Sprechen angefragt und sendet nur, solange man spricht.
    Zwischen zwei Spielern gibt es genau eine Sprachverbindung; wer schon ein Mikrofon hat, ruft an. */
 (function () {
-  const VC = { on: true, open: false, vol: 1, stream: null, asking: false, denied: false, calls: {}, sent: {}, out: {}, ana: {}, speak: {}, touch: false };
-  try { const s = JSON.parse(localStorage.getItem('kz_voice') || 'null'); if (s) { VC.on = s.on !== false; VC.open = !!s.open; VC.vol = s.vol >= 0 ? s.vol : 1; } } catch (e) {}
-  const save = () => { try { localStorage.setItem('kz_voice', JSON.stringify({ on: VC.on, open: VC.open, vol: VC.vol })); } catch (e) {} };
+  // mode: 'toggle' = Taste einmal drücken → Mikro bleibt an, bis man nochmal drückt (Standard) · 'ptt' = Taste halten · 'open' = immer an
+  // live: Mikro ist eingeschaltet (bleibt gespeichert – auch nach dem Neuladen wieder an)
+  const VC = { on: true, mode: 'toggle', live: false, vol: 1, stream: null, asking: false, denied: false, calls: {}, sent: {}, out: {}, ana: {}, speak: {} };
+  try { const s = JSON.parse(localStorage.getItem('kz_voice') || 'null'); if (s) { VC.on = s.on !== false; VC.mode = s.mode || (s.open ? 'open' : 'toggle'); VC.live = !!s.live; VC.vol = s.vol >= 0 ? s.vol : 1; } } catch (e) {}
+  const save = () => { try { localStorage.setItem('kz_voice', JSON.stringify({ on: VC.on, mode: VC.mode, live: VC.live, vol: VC.vol })); } catch (e) {} };
+  // Taste (B) gedrückt: im Modus „an/aus“ umschalten
+  window.voiceKey = () => { if (VC.mode !== 'toggle') return; if (!VC.on) { VC.on = true; VC.live = true; } else VC.live = !VC.live; save(); syncSet();
+    if (typeof showMsg === 'function') showMsg(VC.live ? '🎙 Mikrofon AN – alle hören dich (nochmal drücken = aus)' : '🔇 Mikrofon aus'); };
   const human = id => id && id !== myId && !String(id).startsWith('bot');
   let AC = null;
   const ac = () => { if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (AC && AC.state === 'suspended') AC.resume(); return AC; };
@@ -26,13 +31,13 @@
   const hud = document.createElement('div'); hud.id = 'vcHud'; if (typeof TOUCH !== 'undefined' && TOUCH) hud.className = 'tch'; hud.innerHTML = '<div class="vcMe"></div><div class="vcList"></div>';
   document.body.appendChild(hud);
   const meEl = hud.querySelector('.vcMe'), listEl = hud.querySelector('.vcList');
-  meEl.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); if (!VC.on) { VC.on = true; save(); syncSet(); } else VC.touch = !VC.touch; });
+  meEl.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); if (!VC.on) VC.on = true; VC.live = !VC.live; save(); syncSet(); });   // 🎤 antippen = an/aus
 
   /* --- Einstellungen im Pause-Menü --- */
   const set = document.createElement('div'); set.id = 'vcSet';
   set.innerHTML = `<b>🎙 Sprachchat</b>
     <label><input type="checkbox" id="vcOn"> Sprachchat an (andere hören, selbst sprechen)</label>
-    <label>Sprechen: <select id="vcMode"><option value="ptt">Taste halten</option><option value="open">Mikro immer an</option></select></label>
+    <label>Sprechen: <select id="vcMode"><option value="toggle">Taste drücken = an/aus</option><option value="ptt">Taste halten</option><option value="open">Mikro immer an</option></select></label>
     <label>Lautstärke der anderen <input type="range" id="vcVol" min="0" max="1.5" step="0.05"></label>
     <div id="vcInfo" style="font-size:12px;color:#a8c0a8"></div>`;
   const pausePanel = document.querySelector('#pause .panel'), resume = document.getElementById('btnResume');
@@ -40,12 +45,14 @@
   const $v = id => document.getElementById(id);
   for (const ev of ['keydown', 'keyup']) set.addEventListener(ev, e => e.stopPropagation());
   function syncSet() {
-    $v('vcOn').checked = VC.on; $v('vcMode').value = VC.open ? 'open' : 'ptt'; $v('vcVol').value = VC.vol;
+    $v('vcOn').checked = VC.on; $v('vcMode').value = VC.mode; $v('vcVol').value = VC.vol;
+    const k = typeof kbK === 'function' ? kbK('talk') : 'B';
     $v('vcInfo').textContent = VC.denied ? '⚠ Mikrofon blockiert – im Browser (Schloss-Symbol neben der Adresse) erlauben.'
-      : `Sprechen: Taste ${typeof kbK === 'function' ? kbK('talk') : 'B'} halten · Handy: 🎤 unten links antippen. Ton geht direkt an die Mitspieler.`;
+      : (VC.mode === 'toggle' ? `Taste ${k} einmal drücken = Mikro an (bleibt an), nochmal = aus` : VC.mode === 'ptt' ? `Taste ${k} halten = sprechen` : 'Mikro ist immer an')
+        + ' · Handy: 🎤 antippen. Ton geht direkt an die Mitspieler.';
   }
   $v('vcOn').onchange = e => { VC.on = e.target.checked; save(); if (!VC.on) hangAll(); };
-  $v('vcMode').onchange = e => { VC.open = e.target.value === 'open'; save(); };
+  $v('vcMode').onchange = e => { VC.mode = e.target.value; if (VC.mode !== 'toggle') VC.live = false; save(); syncSet(); };
   $v('vcVol').oninput = e => { VC.vol = +e.target.value; save(); for (const id in VC.out) VC.out[id].volume = Math.min(1, VC.vol); for (const id in VC.ana) if (VC.ana[id].gain) VC.ana[id].gain.gain.value = VC.vol; };
   syncSet();
 
@@ -101,7 +108,7 @@
   setInterval(() => {
     if (typeof peer !== 'undefined' && peer && hooked !== peer) { hooked = peer; peer.on('call', onCall); }
     const playing = typeof running !== 'undefined' && running;
-    const want = VC.on && playing && (VC.open || VC.touch || (typeof keys === 'object' && keys.Talk));
+    const want = VC.on && playing && (VC.mode === 'open' || VC.live || (VC.mode === 'ptt' && typeof keys === 'object' && keys.Talk));
     if (want && !VC.stream) ensureMic();
     if (VC.stream) for (const t of VC.stream.getAudioTracks()) t.enabled = !!want;
     const now = performance.now();
@@ -116,7 +123,8 @@
     if (!playing) return;
     const key = typeof kbK === 'function' ? kbK('talk') : 'B';
     meEl.className = 'vcMe' + (want ? ' live' : '') + (VC.on ? '' : ' off');
-    meEl.textContent = !VC.on ? '🎙 Sprachchat aus' : VC.denied ? '🎙 Mikro blockiert' : want ? '🔴 Du sprichst …' : `🎤 ${TOUCH ? 'antippen' : key + ' halten'} = sprechen`;
+    meEl.textContent = !VC.on ? '🎙 Sprachchat aus' : VC.denied ? '🎙 Mikro blockiert' : want ? (VC.mode === 'ptt' ? '🔴 Du sprichst …' : `🔴 Mikro AN${VC.mode === 'toggle' ? (TOUCH ? ' (antippen = aus)' : ` (${key} = aus)`) : ''}`)
+      : `🎤 ${TOUCH ? 'antippen' : VC.mode === 'ptt' ? key + ' halten' : key + ' drücken'} = Mikro an`;
     let html = '';
     for (const id in VC.speak) if (now - VC.speak[id] < 400 && world.players[id]) html += `<div class="vcP">🔊 ${typeof esc === 'function' ? esc(world.players[id].name || '?') : '?'}</div>`;
     if (listEl.innerHTML !== html) listEl.innerHTML = html;
