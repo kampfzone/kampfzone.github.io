@@ -313,6 +313,7 @@ function boTrade(it, buy, arg) {
   renderBoerse();
 }
 async function boRefresh(force) {
+  if (PORTAL) return;   // Spieleportal: keine Börse, keine Kursabrufe
   const now = Date.now(), jobs = [];
   if (!BO.loadingS && (force || now - BO.tK > 60000)) jobs.push(boLoadCrypto());   // während die Aktien laden: Pause (Anfrage-Limit)
   if (!BO.noDE && (force || now - BO.tA > 300000)) jobs.push(boLoadStocks());
