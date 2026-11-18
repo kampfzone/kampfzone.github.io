@@ -252,7 +252,8 @@ const KB_ACTIONS = [
   ['tune', 'Tuning-Menü (im Auto)', ['KeyU', ''], null],
   ['nitro', 'Nitro zünden (im Auto)', ['KeyN', ''], null],
   ['talk', 'Sprachchat: Mikro an/aus', ['KeyB', ''], 'Talk'],
-  ['map', 'Große Karte (alle Spieler)', ['KeyM', ''], null],
+  ['map', 'Minikarte größer/kleiner', ['KeyM', ''], null],
+  ['bigmap', 'Ganze Karte (alle Spieler)', ['KeyK', ''], null],
 ];
 const KB_DEFAULT = () => Object.fromEntries(KB_ACTIONS.map(a => [a[0], a[2].slice()]));
 let KB = KB_DEFAULT(), KB_LABEL = {};
@@ -281,7 +282,8 @@ const kbK = a => kbName(KB[a][0] || KB[a][1]);   // Name der (ersten) Taste eine
 function kbDown(a, repeat) {
   if (a === 'board') { $('board').classList.remove('hidden'); renderBoard(); return; }
   if (a === 'inv') { if (!repeat) toggleInventory(); return; }
-  if (a === 'map') { if (!repeat && running && window.toggleBigMap) toggleBigMap(); return; }
+  if (a === 'map') { if (!repeat && window.setRadarSize) setRadarSize(RADAR.size + 1); return; }
+  if (a === 'bigmap') { if (!repeat && running && window.toggleBigMap) toggleBigMap(); return; }
   if (!locked) return;
   if (KB_HOLD[a]) keys[KB_HOLD[a]] = true;
   if (repeat) return;

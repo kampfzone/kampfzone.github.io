@@ -145,9 +145,18 @@ const RADAR = MAP_ID === 'hafen' ? { img: null, x0: -62, z0: -62, w: 118, h: 194
   }
   RADAR.img = c;
 })();
+// Minikarte in drei Größen (Taste M / antippen): je größer, desto mehr Umgebung (70 m, 220 m, 520 m Durchmesser)
+const RADAR_SIZES = TOUCH ? [[110, 70], [190, 220], [250, 520]] : [[170, 70], [300, 220], [430, 520]];
+RADAR.size = 0; try { RADAR.size = Math.min(2, Math.max(0, +localStorage.getItem('kz_radar') || 0)); } catch (e) {}
+function setRadarSize(n) {
+  RADAR.size = (n + RADAR_SIZES.length) % RADAR_SIZES.length; try { localStorage.setItem('kz_radar', RADAR.size); } catch (e) {}
+  const [px] = RADAR_SIZES[RADAR.size], cv = $('radar');
+  cv.width = cv.height = px; cv.style.width = cv.style.height = px + 'px'; RADAR.t = 0;
+}
+setRadarSize(RADAR.size);
 function drawRadar(dt) {
   RADAR.t -= dt; if (RADAR.t > 0) return; RADAR.t = 0.08;
-  const cv = $('radar'), g = cv.getContext('2d'), S = cv.width, R = S / 2, scale = S / 70;   // 70 m Durchmesser
+  const cv = $('radar'), g = cv.getContext('2d'), S = cv.width, R = S / 2, span = RADAR_SIZES[RADAR.size][1], scale = S / span;   // Durchmesser in Metern je nach Größe
   g.clearRect(0, 0, S, S);
   g.save(); g.beginPath(); g.arc(R, R, R - 1, 0, 7); g.clip();
   g.fillStyle = 'rgba(10,14,12,0.75)'; g.fillRect(0, 0, S, S);
@@ -160,15 +169,21 @@ function drawRadar(dt) {
     const dx = x - me.pos.x, dz = z - me.pos.z, c = Math.cos(me.yaw), s = Math.sin(me.yaw);
     return [R + (dx * c - dz * s) * scale, R + (dx * s + dz * c) * scale];
   };
+  // alle Spieler: echte Mitspieler mit Namen (weiter weg: am Rand), Bots als kleine graue Punkte; wer schießt, blinkt
+  g.font = `bold ${RADAR.size ? 11 : 10}px system-ui,sans-serif`; g.textAlign = 'center';
   for (const id in world.players) {
     if (id === myId) continue;
     const p = world.players[id]; if (!p.alive) continue;
-    const mate = world.mode === 'tdm' && mine && p.team === mine.team;
+    const bot = String(id).startsWith('bot'), mate = world.mode === 'tdm' && mine && p.team === mine.team;
     const shooting = now - (radarPing[id] || -1e9) < 2000;
-    if (!mate && !shooting) continue;
     let [x, y] = toR(p.x, p.z);
-    const d = Math.hypot(x - R, y - R); if (d > R - 5) { x = R + (x - R) / d * (R - 5); y = R + (y - R) / d * (R - 5); }
-    g.fillStyle = mate ? '#4aa3ff' : '#ff3b30'; g.beginPath(); g.arc(x, y, mate ? 3.5 : 4, 0, 7); g.fill();
+    const d = Math.hypot(x - R, y - R), out = d > R - 6;
+    if (out && bot) continue;
+    if (out) { x = R + (x - R) / d * (R - 6); y = R + (y - R) / d * (R - 6); }
+    g.fillStyle = mate ? '#4aa3ff' : bot ? '#cfcfcf' : '#ff3b30'; g.strokeStyle = 'rgba(0,0,0,.8)'; g.lineWidth = 1.5;
+    g.beginPath(); g.arc(x, y, bot ? 3 : 4.5, 0, 7); g.fill(); g.stroke();
+    if (shooting && (now / 150 | 0) % 2) { g.strokeStyle = '#ffdd55'; g.beginPath(); g.arc(x, y, 7, 0, 7); g.stroke(); }
+    if (!bot) { const nm = String(p.name || '?').slice(0, 12), ty = y < 14 ? y + 15 : y - 7; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.85)'; g.strokeText(nm, x, ty); g.fillStyle = '#fff'; g.fillText(nm, x, ty); }
   }
   // Waffen am Boden (kleine gelbe Punkte)
   for (let i = 0; i < PICKUPS.length; i++) if (pickActive[i]) {
@@ -197,7 +212,7 @@ function toggleBigMap(force) {
   if (!BIGMAP.el) {
     const el = BIGMAP.el = document.createElement('div'); el.id = 'bigMap';
     el.style.cssText = 'position:fixed;inset:0;z-index:40;background:rgba(6,10,8,.82);display:none;align-items:center;justify-content:center;flex-direction:column';
-    el.innerHTML = `<div style="color:#ffcc33;font:800 18px system-ui,sans-serif;margin:6px 0 8px;text-shadow:0 1px 3px #000">🗺 KARTE <span style="color:#cfd8cf;font-weight:600;font-size:14px">· ${TOUCH ? 'antippen = schließen' : kbK('map') + ' = schließen'} · 🟡 du · 🔵 Mitspieler im Team · 🔴 Gegner · ⚪ Bots</span></div><canvas></canvas>`;
+    el.innerHTML = `<div style="color:#ffcc33;font:800 18px system-ui,sans-serif;margin:6px 0 8px;text-shadow:0 1px 3px #000">🗺 KARTE <span style="color:#cfd8cf;font-weight:600;font-size:14px">· ${TOUCH ? 'antippen = schließen' : kbK('bigmap') + ' = schließen'} · 🟡 du · 🔵 Mitspieler im Team · 🔴 Gegner · ⚪ Bots</span></div><canvas></canvas>`;
     BIGMAP.cv = el.querySelector('canvas'); BIGMAP.cv.style.cssText = 'border-radius:10px;box-shadow:0 4px 30px rgba(0,0,0,.6);max-width:96vw;max-height:88vh';
     el.addEventListener('pointerdown', e => { if (TOUCH || e.target === el) toggleBigMap(false); });
     document.body.appendChild(el);
@@ -242,7 +257,7 @@ function drawBigMap() {
   g.restore();
 }
 $('radar').style.pointerEvents = 'auto'; $('radar').style.cursor = 'pointer';
-$('radar').addEventListener('pointerdown', e => { e.stopPropagation(); toggleBigMap(); });
+$('radar').addEventListener('pointerdown', e => { e.stopPropagation(); setRadarSize(RADAR.size + 1); });   // antippen: Minikarte größer (3 Stufen, dann wieder klein)
 
 /* ---------- Trefferrichtung, Killserien, Endbildschirm, Inventar ---------- */
 function showDamageDir(ax, az) {

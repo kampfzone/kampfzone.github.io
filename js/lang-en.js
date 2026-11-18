@@ -57,7 +57,7 @@ exact: {
 "Waffe 1": "Weapon 1", "Waffe 2": "Weapon 2", "Waffe 3": "Weapon 3", "Waffe 4": "Weapon 4", "Ladenwaffe": "Shop weapon", "Punktestand": "Scoreboard", "Inventar": "Inventory",
 "Job abbrechen": "Cancel job", "Zur Startlinie (Rennstrecke)": "To the start line (race track)", "Tuning-Menü (im Auto)": "Tuning menu (in a car)", "Nitro zünden (im Auto)": "Fire nitro (in a car)",
 "Sprachchat: Mikro an/aus": "Voice chat: mic on/off",
-"Große Karte (alle Spieler)": "Big map (all players)", "🗺 KARTE": "🗺 MAP",
+"Minikarte größer/kleiner": "Minimap bigger/smaller", "Ganze Karte (alle Spieler)": "Full map (all players)", "🗺 KARTE": "🗺 MAP",
 // Tastennamen
 "Shift links": "Left Shift", "Shift rechts": "Right Shift", "Strg links": "Left Ctrl", "Strg rechts": "Right Ctrl", "🖱 Links": "🖱 Left", "🖱 Mitte": "🖱 Middle", "🖱 Rechts": "🖱 Right",
 "🖱 Taste 4": "🖱 Button 4", "🖱 Taste 5": "🖱 Button 5", "🖱 Rad ↑": "🖱 Wheel ↑", "🖱 Rad ↓": "🖱 Wheel ↓", "Feststell": "Caps Lock", "/ (bzw. -)": "/ (or -)",
