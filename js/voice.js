@@ -1,6 +1,6 @@
 'use strict';
 /* ======================= Sprachchat =======================
-   Ton geht direkt von Spieler zu Spieler (WebRTC über PeerJS, kein Server dazwischen).
+   Ton läuft über die Spielverbindung (wie die Spielzüge, über den Host) – klappt in jedem Netz, in dem man zusammen spielen kann.
    Sprechen: Taste B halten (änderbar: Optionen → Tastatur & Maus) · Handy: 🎤 antippen (an/aus).
    In der Pause: Sprachchat an/aus, „Mikro immer an“, Lautstärke der anderen.
    Das Mikrofon wird erst beim ersten Sprechen angefragt und sendet nur, solange man spricht.
@@ -9,7 +9,7 @@
   if (window.KZ_PORTAL) return;   // Spieleportal: kein Sprachchat mit Fremden
   // mode: 'toggle' = Taste einmal drücken → Mikro bleibt an, bis man nochmal drückt (Standard) · 'ptt' = Taste halten · 'open' = immer an
   // live: Mikro ist eingeschaltet (bleibt gespeichert – auch nach dem Neuladen wieder an)
-  const VC = { on: true, mode: 'toggle', live: false, vol: 1, stream: null, asking: false, denied: false, calls: {}, sent: {}, out: {}, ana: {}, speak: {} };
+  const VC = { on: true, mode: 'toggle', live: false, vol: 1, stream: null, asking: false, denied: false, rx: {}, last: {}, speak: {} };
   try { const s = JSON.parse(localStorage.getItem('kz_voice') || 'null'); if (s) { VC.on = s.on !== false; VC.mode = s.mode || (s.open ? 'open' : 'toggle'); VC.live = !!s.live; VC.vol = s.vol >= 0 ? s.vol : 1; VC.dev = s.dev || ''; } } catch (e) {}
   const save = () => { try { localStorage.setItem('kz_voice', JSON.stringify({ on: VC.on, mode: VC.mode, live: VC.live, vol: VC.vol, dev: VC.dev })); } catch (e) {} };
   // Taste (B) gedrückt: im Modus „an/aus“ umschalten
@@ -56,7 +56,7 @@
   }
   $v('vcOn').onchange = e => { VC.on = e.target.checked; save(); if (!VC.on) hangAll(); };
   $v('vcMode').onchange = e => { VC.mode = e.target.value; if (VC.mode !== 'toggle') VC.live = false; save(); syncSet(); };
-  $v('vcVol').oninput = e => { VC.vol = +e.target.value; save(); for (const id in VC.out) VC.out[id].volume = Math.min(1, VC.vol); for (const id in VC.ana) if (VC.ana[id].gain) VC.ana[id].gain.gain.value = VC.vol; };
+  $v('vcVol').oninput = e => { VC.vol = +e.target.value; save(); for (const id in VC.rx) VC.rx[id].g.gain.value = VC.vol; };
   // Mikrofon auswählen (Liste erst mit Namen, wenn das Mikrofon einmal erlaubt wurde)
   function fillDevs() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
@@ -68,7 +68,7 @@
   }
   $v('vcDev').onchange = e => {
     VC.dev = e.target.value; save();
-    if (VC.stream) { for (const t of VC.stream.getTracks()) t.stop(); VC.stream = null; VC.meAna = null; hangAll(); }   // neues Mikrofon: beim nächsten Sprechen neu verbinden
+    if (VC.stream) { for (const t of VC.stream.getTracks()) t.stop(); VC.stream = null; VC.meAna = null; stopSend(); }   // neues Mikrofon: beim nächsten Sprechen neu verbinden
   };
   fillDevs();
   syncSet();
@@ -84,65 +84,59 @@
       VC.stream = s; VC.asking = false; for (const t of s.getAudioTracks()) t.enabled = false;
       const C = ac(); if (C) { try { const src = C.createMediaStreamSource(s), an = C.createAnalyser(); an.fftSize = 512; src.connect(an); VC.meAna = { an, buf: new Uint8Array(an.fftSize) }; } catch (e) {} }   // eigener Pegel (Anzeige: kommt Ton vom Mikrofon?)
       VC.micName = (s.getAudioTracks()[0] || {}).label || '';
-      callAll();   // jetzt haben wir Ton → alle anrufen (bestehende Nur-Hören-Verbindungen werden ersetzt)
+      startSend(s);
     }).catch(() => { VC.asking = false; VC.denied = true; syncSet(); if (typeof showMsg === 'function') showMsg('🎙 Mikrofon nicht erlaubt – im Browser freigeben, dann geht der Sprachchat.'); });
   }
 
-  /* --- Verbindungen --- */
-  function attach(call, mine) {
-    call._mine = mine; VC.calls[call.peer] = call;
-    call.on('stream', s => play(call.peer, s));
-    const end = () => { if (VC.calls[call.peer] === call) { delete VC.calls[call.peer]; delete VC.sent[call.peer]; stop(call.peer); } };
-    call.on('close', end); call.on('error', end);
+  /* --- Übertragung: über die Spielverbindung (wie Spielzüge, über den Host) – klappt überall, wo das gemeinsame Spielen klappt.
+     Mikrofon → 12 kHz, μ-law (1 Byte pro Abtastwert, ~12 kB/s) → Host → alle anderen; Stille wird nicht gesendet. */
+  const RATE = 12000;
+  const enc = x => { const s = Math.max(-1, Math.min(1, x)); return (s < 0 ? 0x80 : 0) | Math.round(Math.log(1 + 255 * Math.abs(s)) / Math.log(256) * 127); };
+  const DEC = new Float32Array(256); for (let v = 0; v < 256; v++) DEC[v] = (v & 0x80 ? -1 : 1) * (Math.pow(256, (v & 0x7f) / 127) - 1) / 255;
+  function startSend(s) {
+    const C = ac(); if (!C || VC.proc) return;
+    try {
+      const src = C.createMediaStreamSource(s), pr = C.createScriptProcessor(2048, 1, 1), z = C.createGain(); z.gain.value = 0;
+      src.connect(pr); pr.connect(z); z.connect(C.destination);
+      pr.onaudioprocess = e => {
+        if (!VC.sending || typeof net !== 'object') return;
+        const inp = e.inputBuffer.getChannelData(0), step = C.sampleRate / RATE, n = Math.floor(inp.length / step), out = new Uint8Array(n);
+        let rms = 0;
+        for (let i = 0; i < n; i++) { const a = Math.floor(i * step), b = Math.max(a + 1, Math.floor((i + 1) * step)); let v = 0; for (let k = a; k < b; k++) v += inp[k]; v /= (b - a); rms += v * v; out[i] = enc(v); }
+        if (Math.sqrt(rms / n) < 0.003) return;   // Stille
+        try { net.send({ t: 'vc', d: out }); } catch (err) {}
+      };
+      VC.proc = pr; VC.procSrc = src;
+    } catch (e) {}
   }
-  function callTo(id) {
-    if (!peer || !VC.stream || !human(id)) return;
-    const old = VC.calls[id]; if (old) { delete VC.calls[id]; try { old.close(); } catch (e) {} }
-    let c; try { c = peer.call(id, VC.stream); } catch (e) { return; }
-    if (!c) return;
-    attach(c, true); VC.sent[id] = true;
-  }
-  function callAll() { if (!VC.on || typeof world !== 'object') return; for (const id in world.players) if (human(id) && !VC.sent[id]) callTo(id); }
-  function onCall(call) {
-    if (!VC.on) { try { call.close(); } catch (e) {} return; }
-    const id = call.peer, old = VC.calls[id];
-    if (old && old._mine && VC.sent[id] && String(myId) < String(id)) { try { call.close(); } catch (e) {} return; }   // beide riefen gleichzeitig an: die Verbindung des „kleineren“ Namens gewinnt
-    if (old) { delete VC.calls[id]; try { old.close(); } catch (e) {} }
-    try { call.answer(VC.stream || undefined); } catch (e) { return; }
-    attach(call, false); VC.sent[id] = !!VC.stream;
-  }
-  function hangAll() { for (const id in VC.calls) { try { VC.calls[id].close(); } catch (e) {} } VC.calls = {}; VC.sent = {}; for (const id in VC.out) stop(id); }
-
-  /* --- Wiedergabe + „spricht gerade“-Erkennung --- */
-  function play(id, stream) {
-    stop(id);
-    const a = new Audio(); a.autoplay = true; a.srcObject = stream; a.volume = Math.min(1, VC.vol); a.muted = false;
-    const p = a.play(); if (p && p.catch) p.catch(() => {});
-    VC.out[id] = a;
-    const C = ac(); if (C) { try { const src = C.createMediaStreamSource(stream), an = C.createAnalyser(); an.fftSize = 512; src.connect(an); VC.ana[id] = { an, buf: new Uint8Array(an.fftSize) }; } catch (e) {} }
-  }
-  function stop(id) { const a = VC.out[id]; if (a) { try { a.pause(); a.srcObject = null; } catch (e) {} delete VC.out[id]; } delete VC.ana[id]; delete VC.speak[id]; }
+  function stopSend() { if (VC.proc) { try { VC.procSrc.disconnect(); VC.proc.disconnect(); } catch (e) {} VC.proc = null; } }
+  // Ton von einem Mitspieler (net.js ruft das auf): hintereinander abspielen, mit kleinem Puffer gegen Ruckeln
+  window.vcRecv = (id, d) => {
+    if (!VC.on || !d || id === myId) return;
+    const C = ac(); if (!C) return;
+    const u = d instanceof Uint8Array ? d : d instanceof ArrayBuffer ? new Uint8Array(d) : ArrayBuffer.isView(d) ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength) : null;
+    if (!u || !u.length) return;
+    const buf = C.createBuffer(1, u.length, RATE), ch = buf.getChannelData(0); let rms = 0;
+    for (let i = 0; i < u.length; i++) { const v = DEC[u[i]]; ch[i] = v; rms += v * v; }
+    const now = performance.now(); VC.last[id] = now;
+    if (Math.sqrt(rms / u.length) > 0.02) VC.speak[id] = now;
+    let o = VC.rx[id]; if (!o) { o = VC.rx[id] = { g: C.createGain(), t: 0 }; o.g.connect(C.destination); }
+    o.g.gain.value = VC.vol;
+    const t0 = C.currentTime; if (o.t < t0 + 0.02 || o.t > t0 + 0.7) o.t = t0 + 0.12;
+    const sn = C.createBufferSource(); sn.buffer = buf; sn.connect(o.g); sn.start(o.t); o.t += buf.duration;
+  };
+  function hangAll() { for (const id in VC.rx) { try { VC.rx[id].g.disconnect(); } catch (e) {} } VC.rx = {}; VC.speak = {}; }
   function level(o) { o.an.getByteTimeDomainData(o.buf); let s = 0; for (let i = 0; i < o.buf.length; i += 4) { const v = (o.buf[i] - 128) / 128; s += v * v; } return Math.sqrt(s / (o.buf.length / 4)); }
 
   /* --- Takt: Sprechen an/aus, neue Mitspieler anrufen, Anzeige --- */
-  let hooked = null, lastScan = 0;
   setInterval(() => {
-    if (typeof peer !== 'undefined' && peer && hooked !== peer) { hooked = peer; peer.on('call', onCall); }
     const playing = typeof running !== 'undefined' && running;
     const want = VC.on && playing && (VC.mode === 'open' || VC.live || (VC.mode === 'ptt' && typeof keys === 'object' && keys.Talk));
     if (want && !VC.stream) ensureMic();
     if (VC.stream) for (const t of VC.stream.getAudioTracks()) t.enabled = !!want;
+    VC.sending = !!want;
     const now = performance.now();
-    if (playing && VC.on && now - lastScan > 1500) {
-      lastScan = now;
-      if (VC.stream) callAll();
-      for (const id in VC.calls) if (!world.players[id]) { try { VC.calls[id].close(); } catch (e) {} delete VC.calls[id]; delete VC.sent[id]; stop(id); }   // Spieler weg
-    }
-    for (const id in VC.ana) if (level(VC.ana[id]) > 0.035) VC.speak[id] = now;
-    // Verbindung hängt fest oder ist gescheitert → schließen; beim nächsten Durchlauf wird neu angerufen
-    for (const id in VC.calls) { const pc = VC.calls[id].peerConnection, st = pc && pc.iceConnectionState;
-      if (st === 'failed' || (st === 'disconnected' && (VC.calls[id]._disc = VC.calls[id]._disc || now) && now - VC.calls[id]._disc > 6000)) { try { VC.calls[id].close(); } catch (e) {} delete VC.calls[id]; delete VC.sent[id]; stop(id); }
-      else if (st !== 'disconnected') VC.calls[id]._disc = 0; }
+    for (const id in VC.rx) if (typeof world === 'object' && !world.players[id]) { try { VC.rx[id].g.disconnect(); } catch (e) {} delete VC.rx[id]; delete VC.speak[id]; }   // Spieler weg
     // Pause-Menü offen: Mikrofon-Pegel und Verbindung zu jedem Mitspieler anzeigen (zur Fehlersuche)
     const pz = document.getElementById('pause');
     if (pz && !pz.classList.contains('hidden') && now - (VC.connT || 0) > 400 && typeof world === 'object') {
@@ -152,10 +146,8 @@
         : (VC.denied ? '' : '🎙 Mikrofon noch nicht eingeschaltet<br>');
       for (const id in world.players) {
         if (!human(id)) continue;
-        const c = VC.calls[id], pc = c && c.peerConnection, st = pc ? pc.iceConnectionState : 'none';
-        const ok = st === 'connected' || st === 'completed';
-        const nm = typeof esc === 'function' ? esc(world.players[id].name || '?') : '?';
-        h += `${ok ? '🟢' : st === 'none' ? '⚪' : st === 'failed' || st === 'disconnected' ? '🔴' : '🟡'} ${nm}: ${ok ? (VC.out[id] ? 'verbunden – Ton kommt an' : 'verbunden') : st === 'none' ? (VC.stream ? 'verbindet gleich …' : 'wartet, bis jemand das Mikro anmacht') : st === 'failed' || st === 'disconnected' ? 'keine Verbindung (Netzwerk) – neuer Versuch …' : 'verbindet …'}<br>`;
+        const nm = typeof esc === 'function' ? esc(world.players[id].name || '?') : '?', hear = now - (VC.last[id] || -1e9) < 1500;
+        h += `🟢 ${nm}: ${hear ? 'Ton kommt an 🔊' : 'verbunden (spricht gerade nicht)'}<br>`;
       }
       const ce = document.getElementById('vcConn'); if (ce && ce.innerHTML !== h) ce.innerHTML = h;
     }
@@ -175,7 +167,7 @@
     if (listEl.innerHTML !== html) listEl.innerHTML = html;
   }, 60);
   // Browser hat das Abspielen blockiert (kein Klick vorher)? Beim nächsten Klick/Tastendruck nachholen
-  const unlock = () => { ac(); for (const id in VC.out) { const a = VC.out[id]; if (a.paused) { const p = a.play(); if (p && p.catch) p.catch(() => {}); } } };
+  const unlock = () => { ac(); };
   document.addEventListener('pointerdown', unlock, true); document.addEventListener('keydown', unlock, true);
   document.getElementById('btnSet2') && document.getElementById('pause').addEventListener('click', () => syncSet());
   window.VOICE = VC;   // zum Nachsehen
