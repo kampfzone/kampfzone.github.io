@@ -1272,7 +1272,10 @@ function jetHint() {
 // Achsen des Jets + Rumpfmitte c (Drehpunkt, 1,7 m über den Rädern)
 const JET_PIVOT = 1.7, _jetUp = new THREE.Vector3();
 // Schub von Flugzeug/Jet: steigt, solange Gas gedrückt ist (Handy: so weit wie der Regler); loslassen = geht zurück auf Leerlauf, S/Bremse = schneller
+const THR_HOLD = { on: false };   // Option: Schubhebel bleibt stehen
+try { THR_HOLD.on = localStorage.getItem('kz_thrhold') === '1'; } catch (e) {}
 function planeThrottle(cur, thr, dt) {
+  if (THR_HOLD.on) return Math.max(0, Math.min(1, cur + (thr > 0 ? 0.6 : thr < 0 ? -0.8 : 0) * dt));
   const tgt = Math.max(0, thr), rate = cur < tgt ? 0.9 : thr < 0 ? 1.4 : 0.5;
   return cur < tgt ? Math.min(tgt, cur + rate * dt) : Math.max(tgt, cur - rate * dt);
 }

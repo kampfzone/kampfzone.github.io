@@ -16,8 +16,8 @@ if (PORTAL) {
   document.head.appendChild(st);
 }
 
-/* Update-Prüfung: beim Veröffentlichen wird 20261117-183204 durch eine Versionsnummer ersetzt */
-const BUILD = '20261117-183204';
+/* Update-Prüfung: beim Veröffentlichen wird 20261118-174837 durch eine Versionsnummer ersetzt */
+const BUILD = '20261118-174837';
 // Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
 // Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
 const UPD = { newer: null };

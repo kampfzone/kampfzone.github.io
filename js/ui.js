@@ -283,6 +283,10 @@ try { FPS.on = localStorage.getItem('kz_fps') !== '0'; } catch (e) {}
 const fpsLabel = () => { $('btnFps').textContent = '📊 FPS-Anzeige: ' + (FPS.on ? 'AN' : 'AUS'); $('fpsBox').classList.toggle('off', !FPS.on); };
 $('btnFps').onclick = () => { FPS.on = !FPS.on; try { localStorage.setItem('kz_fps', FPS.on ? '1' : '0'); } catch (e) {} fpsLabel(); };
 fpsLabel();
+// Flugzeug/Jet: Gas „bleibt“ (W/S stellen den Schubhebel, er bleibt stehen) oder „nur solange gedrückt“
+const thrLabel = () => { $('btnThr').textContent = '✈️ Flugzeug-Gas: ' + (THR_HOLD.on ? 'bleibt stehen (W mehr, S weniger)' : 'nur solange gedrückt'); };
+$('btnThr').onclick = () => { THR_HOLD.on = !THR_HOLD.on; try { localStorage.setItem('kz_thrhold', THR_HOLD.on ? '1' : '0'); } catch (e) {} thrLabel(); };
+thrLabel();
 function fpsTick(t) {
   FPS.n++;
   if (t - FPS.t0 < 500) return;
