@@ -57,6 +57,7 @@ exact: {
 "Waffe 1": "Weapon 1", "Waffe 2": "Weapon 2", "Waffe 3": "Weapon 3", "Waffe 4": "Weapon 4", "Ladenwaffe": "Shop weapon", "Punktestand": "Scoreboard", "Inventar": "Inventory",
 "Job abbrechen": "Cancel job", "Zur Startlinie (Rennstrecke)": "To the start line (race track)", "Tuning-Menü (im Auto)": "Tuning menu (in a car)", "Nitro zünden (im Auto)": "Fire nitro (in a car)",
 "Sprachchat: Mikro an/aus": "Voice chat: mic on/off",
+"Große Karte (alle Spieler)": "Big map (all players)", "🗺 KARTE": "🗺 MAP",
 // Tastennamen
 "Shift links": "Left Shift", "Shift rechts": "Right Shift", "Strg links": "Left Ctrl", "Strg rechts": "Right Ctrl", "🖱 Links": "🖱 Left", "🖱 Mitte": "🖱 Middle", "🖱 Rechts": "🖱 Right",
 "🖱 Taste 4": "🖱 Button 4", "🖱 Taste 5": "🖱 Button 5", "🖱 Rad ↑": "🖱 Wheel ↑", "🖱 Rad ↓": "🖱 Wheel ↓", "Feststell": "Caps Lock", "/ (bzw. -)": "/ (or -)",
@@ -181,6 +182,7 @@ exact: {
 "1 Tag": "1 day", "1 Woche": "1 week", "1 Monat": "1 month", "1 Jahr": "1 year", "Hoch": "High", "Tief": "Low", "Zeitraum": "Period", "Kurs wird geladen …": "Loading price …", "📈 Chart wird geladen …": "📈 Loading chart …",
 },
 rules: [
+["· antippen = schließen · 🟡 du · 🔵 Mitspieler im Team · 🔴 Gegner · ⚪ Bots", "· tap = close · 🟡 you · 🔵 teammates · 🔴 enemies · ⚪ bots"], ["· (.+) = schließen · 🟡 du · 🔵 Mitspieler im Team · 🔴 Gegner · ⚪ Bots", "· $1 = close · 🟡 you · 🔵 teammates · 🔴 enemies · ⚪ bots"],
 // Version / Laden
 ["Version (.+) · ✓ aktuell", "Version $1 · ✓ up to date"], ["Version (.+) · wird geprüft …", "Version $1 · checking …"], ["(\\d+)\\.(\\d+)\\. (\\d+):(\\d+) Uhr", "$1.$2. $3:$4"],
 ["Grafik wird geladen … (\\d+) %", "Loading graphics … $1 %"], ["⚠ Neue Version verfügbar \\((.+)\\) –", "⚠ New version available ($1) –"], ["jetzt laden", "load now"],

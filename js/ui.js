@@ -190,6 +190,60 @@ function drawRadar(dt) {
   g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 2; g.beginPath(); g.arc(R, R, R - 1, 0, 7); g.stroke();
 }
 
+/* ---------- Große Karte (Taste M): ganze Karte, Norden oben, alle Spieler mit Namen ---------- */
+const BIGMAP = { open: false, el: null, cv: null, timer: 0 };
+function toggleBigMap(force) {
+  BIGMAP.open = force !== undefined ? force : !BIGMAP.open;
+  if (!BIGMAP.el) {
+    const el = BIGMAP.el = document.createElement('div'); el.id = 'bigMap';
+    el.style.cssText = 'position:fixed;inset:0;z-index:40;background:rgba(6,10,8,.82);display:none;align-items:center;justify-content:center;flex-direction:column';
+    el.innerHTML = `<div style="color:#ffcc33;font:800 18px system-ui,sans-serif;margin:6px 0 8px;text-shadow:0 1px 3px #000">🗺 KARTE <span style="color:#cfd8cf;font-weight:600;font-size:14px">· ${TOUCH ? 'antippen = schließen' : kbK('map') + ' = schließen'} · 🟡 du · 🔵 Mitspieler im Team · 🔴 Gegner · ⚪ Bots</span></div><canvas></canvas>`;
+    BIGMAP.cv = el.querySelector('canvas'); BIGMAP.cv.style.cssText = 'border-radius:10px;box-shadow:0 4px 30px rgba(0,0,0,.6);max-width:96vw;max-height:88vh';
+    el.addEventListener('pointerdown', e => { if (TOUCH || e.target === el) toggleBigMap(false); });
+    document.body.appendChild(el);
+  }
+  BIGMAP.el.style.display = BIGMAP.open ? 'flex' : 'none';
+  clearInterval(BIGMAP.timer);
+  if (BIGMAP.open) { drawBigMap(); BIGMAP.timer = setInterval(() => { if (!running) toggleBigMap(false); else drawBigMap(); }, 120); }
+}
+function drawBigMap() {
+  const cv = BIGMAP.cv, img = RADAR.img, W = Math.max(320, Math.min(innerWidth * 0.96, 1600)), Hh = Math.max(240, innerHeight * 0.86);
+  const k = Math.min(W / RADAR.w, Hh / RADAR.h);   // Pixel pro Meter
+  const w = Math.round(RADAR.w * k), h = Math.round(RADAR.h * k);
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  const g = cv.getContext('2d');
+  g.drawImage(img, 0, 0, w, h);
+  const P = (x, z) => [(x - RADAR.x0) * k, (z - RADAR.z0) * k];
+  g.textAlign = 'center';
+  // Orte
+  g.font = '15px sans-serif';
+  for (const s of window.MAP_POIS || []) { const [x, y] = P(s.x, s.z); g.fillText(s.t, x, y + 5); }
+  for (const s of window.GUN_SHOPS || []) { const [x, y] = P(s.x, s.z); g.fillText('🔫', x, y + 5); }
+  for (const T of window.DRIFT_TRACKS || []) { const [x, y] = P(...T.start); g.fillText('🏁', x, y + 5); }
+  for (const c of window.MAP_JOBS || []) { const [x, y] = P(c.x, c.z); g.fillStyle = '#ffcc33'; g.font = 'bold 14px sans-serif'; g.fillText('$', x, y + 5); g.font = '15px sans-serif'; }
+  if (window.JOB_TGT) { const [x, y] = P(window.JOB_TGT.x, window.JOB_TGT.z); g.fillStyle = '#37c8ff'; g.beginPath(); g.moveTo(x, y - 8); g.lineTo(x + 8, y); g.lineTo(x, y + 8); g.lineTo(x - 8, y); g.closePath(); g.fill(); }
+  // Spieler
+  const mine = world.players[myId];
+  g.font = 'bold 13px system-ui,sans-serif';
+  for (const id in world.players) {
+    if (id === myId) continue;
+    const p = world.players[id]; if (!p.alive) continue;
+    const [x, y] = P(p.x, p.z), bot = String(id).startsWith('bot');
+    const col = world.mode === 'tdm' && mine ? (p.team === mine.team ? '#4aa3ff' : '#ff3b30') : bot ? '#d8d8d8' : '#ff3b30';
+    g.fillStyle = col; g.strokeStyle = '#000'; g.lineWidth = 2;
+    g.beginPath(); g.arc(x, y, bot ? 4 : 6, 0, 7); g.fill(); g.stroke();
+    if (!bot) { const nm = String(p.name || '?'); g.lineWidth = 3; g.strokeText(nm, x, y - 10); g.fillStyle = '#fff'; g.fillText(nm, x, y - 10); }
+  }
+  // ich: Pfeil in Blickrichtung
+  const mp = ride.v >= 0 ? ride.pos : me.pos, [mx, my] = P(mp.x, mp.z), yaw = me.yaw;
+  g.save(); g.translate(mx, my); g.rotate(-yaw);
+  g.fillStyle = '#ffcc33'; g.strokeStyle = '#000'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(0, -11); g.lineTo(-8, 8); g.lineTo(0, 4); g.lineTo(8, 8); g.closePath(); g.fill(); g.stroke();
+  g.restore();
+}
+$('radar').style.pointerEvents = 'auto'; $('radar').style.cursor = 'pointer';
+$('radar').addEventListener('pointerdown', e => { e.stopPropagation(); toggleBigMap(); });
+
 /* ---------- Trefferrichtung, Killserien, Endbildschirm, Inventar ---------- */
 function showDamageDir(ax, az) {
   const dx = ax - me.pos.x, dz = az - me.pos.z;
