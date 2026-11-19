@@ -418,7 +418,7 @@ function tryShoot(now) {
       startNade(id, mz.clone(), v, true, me.weapon);
       net.send({ t: 'nade', i: id, o: [mz.x, mz.y, mz.z], v: [v.x, v.y, v.z], imp: me.weapon });
     }
-    const rk = w.kick; me.pitch = Math.min(1.55, me.pitch + rk * 0.45); me.recoilP += rk * 0.9; me.kick = 1;
+    const rk = w.kick * (me.scoped ? 0.2 : 1); me.pitch = Math.min(1.55, me.pitch + rk * 0.45); me.recoilP += rk * 0.9; me.kick = 1;
     sndShot(me.weapon, 0.6); puff(mz, 0xd8d8d8, 0.4, 1.0, _f.clone().multiplyScalar(-1.5).add(new THREE.Vector3(0, 0.5, 0)), { opacity: 0.45, grow: 4 });
     if (!tp) { flashT = 0.06; flash.visible = true; flashLight.intensity = 3; }
     if (me.ammo[me.weapon] === 0) setTimeout(startReload, 300);
@@ -450,9 +450,11 @@ function tryShoot(now) {
   if (anyHit) showHitmarker(anyHead);
   net.send({ t: 'shot', id: myId, w: me.weapon, o: [+mz.x.toFixed(2), +mz.y.toFixed(2), +mz.z.toFixed(2)], e: ends });
   // Rückstoß: ein Teil bleibt (Waffe steigt), ein Teil federt zurück
-  const rk = w.kick * (me.crouch ? 0.6 : 1) * (0.8 + Math.random() * 0.4);
+  // beim Zielen bleibt die Waffe fast ruhig (nur ein Hauch Rückstoß)
+  const aimS = me.scoped ? 0.12 : 1;
+  const rk = w.kick * (me.crouch ? 0.6 : 1) * (0.8 + Math.random() * 0.4) * aimS;
   me.pitch = Math.min(1.55, me.pitch + rk * 0.45);
-  me.recoilP += rk * 0.9; me.recoilY += (Math.random() - 0.5) * w.kick * 0.6;
+  me.recoilP += rk * 0.9; me.recoilY += (Math.random() - 0.5) * w.kick * 0.6 * aimS;
   me.kick = 1;
   sndShot(me.weapon, 0.5);
   puff(mz, 0xcfcfcf, 0.12, 0.5, _f.clone().multiplyScalar(0.6).add(new THREE.Vector3(0, 0.4, 0)), { opacity: 0.3, grow: 2.5 });
@@ -741,15 +743,15 @@ function animateViewModel(dt, w) {
   const ads = me.scoped && !w.scope && me.reloading <= 0;
   const adsY = gunInfo ? -gunInfo.sight * viewGun.scale.y : -0.17;
   me.adsT = (me.adsT || 0) + ((ads ? 1 : 0) - (me.adsT || 0)) * (1 - Math.exp(-16 * dt));
-  const bobAmt = (1 - me.adsT * 0.85) * (me.crouch ? 0.6 : 1);
+  const bobAmt = (1 - me.adsT) * (me.crouch ? 0.6 : 1);
   let px = GUN_POS.x * (1 - me.adsT), py = GUN_POS.y + (adsY - GUN_POS.y) * me.adsT, pz = GUN_POS.z + me.adsT * 0.08;
   let rx = 0, ry = 0, rz = 0;
   // Gehen + Atmen
   px += Math.cos(me.bob) * 0.012 * bobAmt; py += Math.sin(me.bob * 2) * 0.012 * bobAmt + Math.sin(performance.now() / 900) * 0.003;
   // Mausschwung
-  ry += me.swayX * 0.8 * (1 - me.adsT * 0.7); rx += me.swayY * 0.6 * (1 - me.adsT * 0.7); px -= me.swayX * 0.15;
-  // Rückstoß
-  pz += me.kick * 0.08 * (1 - me.adsT * 0.4); rx += me.kick * 0.15;
+  ry += me.swayX * 0.8 * (1 - me.adsT); rx += me.swayY * 0.6 * (1 - me.adsT); px -= me.swayX * 0.15 * (1 - me.adsT);
+  // Rückstoß (beim Zielen: Waffe bleibt still)
+  pz += me.kick * 0.08 * (1 - me.adsT * 0.9); rx += me.kick * 0.15 * (1 - me.adsT);
   // Landen
   py -= Math.sin(Math.min(1, me.landT / 0.3) * Math.PI) * 0.05;
   // Sprinten
