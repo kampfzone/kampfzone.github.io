@@ -16,8 +16,8 @@ if (PORTAL) {
   document.head.appendChild(st);
 }
 
-/* Update-Prüfung: beim Veröffentlichen wird 20261119-164423 durch eine Versionsnummer ersetzt */
-const BUILD = '20261119-164423';
+/* Update-Prüfung: beim Veröffentlichen wird 20261119-164955 durch eine Versionsnummer ersetzt */
+const BUILD = '20261119-164955';
 // Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
 // Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
 const UPD = { newer: null };
@@ -467,17 +467,17 @@ function sndHit(head) {
   const t = actx.currentTime, n = noiseSrc(), bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 3200; bp.Q.value = 2;
   const g = actx.createGain(); g.gain.setValueAtTime(0.32, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
   n.connect(bp); bp.connect(g); g.connect(master); n.start(t, Math.random()); n.stop(t + 0.04);
-  sndBeep(head ? 1500 : 980, 0.045, 0.07, 'triangle');
-  if (head) for (const [f, d, a] of [[2637, 0.35, 0.07], [3951, 0.25, 0.035]]) { const o = actx.createOscillator(), go = actx.createGain(); o.type = 'sine'; o.frequency.value = f; go.gain.setValueAtTime(a, t + 0.01); go.gain.exponentialRampToValueAtTime(0.001, t + d); o.connect(go); go.connect(master); o.start(t + 0.01); o.stop(t + d + 0.02); }
+  sndBeep(head ? 1100 : 760, 0.04, 0.06, 'sine');
+  if (head) for (const [f, d, a] of [[1319, 0.22, 0.07], [1976, 0.15, 0.025]]) { const o = actx.createOscillator(), go = actx.createGain(); o.type = 'sine'; o.frequency.value = f; go.gain.setValueAtTime(a, t + 0.01); go.gain.exponentialRampToValueAtTime(0.001, t + d); o.connect(go); go.connect(master); o.start(t + 0.01); o.stop(t + d + 0.02); }
 }
 // Eliminierung: zwei aufsteigende Töne (je Mehrfachkill höher)
 function sndKill(n = 1) {
   if (!actx) return;
   const t = actx.currentTime, base = 660 * Math.pow(1.122, Math.min(4, n - 1));
   [[base, 0], [base * 1.5, 0.07]].forEach(([f, dt]) => {
-    const o = actx.createOscillator(), o2 = actx.createOscillator(), g = actx.createGain(); o.type = 'triangle'; o2.type = 'sine'; o.frequency.value = f; o2.frequency.value = f * 2;
-    g.gain.setValueAtTime(0.0001, t + dt); g.gain.linearRampToValueAtTime(0.13, t + dt + 0.008); g.gain.exponentialRampToValueAtTime(0.001, t + dt + 0.28);
-    o.connect(g); o2.connect(g); g.connect(master); o.start(t + dt); o2.start(t + dt); o.stop(t + dt + 0.3); o2.stop(t + dt + 0.3);
+    const o = actx.createOscillator(), g = actx.createGain(); o.type = 'sine'; o.frequency.value = f * 0.75;
+    g.gain.setValueAtTime(0.0001, t + dt); g.gain.linearRampToValueAtTime(0.14, t + dt + 0.008); g.gain.exponentialRampToValueAtTime(0.001, t + dt + 0.2);
+    o.connect(g); g.connect(master); o.start(t + dt); o.stop(t + dt + 0.22);
   });
 }
 function sndBoom(pos) {

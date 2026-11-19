@@ -390,7 +390,7 @@ function frame(t) {
   updateVehicles(dt);
   updateAtmosphere(dt);
   if (window.grassTick) grassTick(dt);       // stehendes Gras um den Spieler (grass.js) – nach dem Bewegen, damit es zur Kamera passt
-  ambientTick(dt);   // Wind, Vögel, Stadtrauschen
+  // Umgebungsgeräusche (Wind, Vögel, Stadtrauschen) sind aus – sie klangen wie ein ständiges Rauschen/Quietschen
   const sunMoved = followSun(camera.position.x, camera.position.z);
   // Grafik „Leistung“: Schatten nur ~10× pro Sekunde neu zeichnen (und sofort, wenn der Schattenbereich mitwandert)
   // („Klar & schnell“: nur ~4× pro Sekunde – Schatten bewegen sich kaum, spart viel Grafikleistung)

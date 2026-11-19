@@ -12,10 +12,11 @@
   /* --- Knopf-Klänge --- */
   function uiTick(hover) {
     if (!ready()) return;
+    // weich und tief (kein Piepen): Drüberfahren = leises „Tock“, Klicken = kurzer, runder „Plopp“
     const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
-    o.type = hover ? 'sine' : 'triangle';
-    o.frequency.setValueAtTime(hover ? 1850 : 880, t); if (!hover) o.frequency.exponentialRampToValueAtTime(1320, t + 0.05);
-    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(hover ? 0.025 : 0.09, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + (hover ? 0.04 : 0.11));
+    o.type = 'sine';
+    o.frequency.setValueAtTime(hover ? 520 : 440, t); o.frequency.exponentialRampToValueAtTime(hover ? 380 : 260, t + 0.06);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(hover ? 0.03 : 0.1, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + (hover ? 0.05 : 0.09));
     o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.13);
   }
   let lastBtn = null, lastHover = 0;
@@ -51,10 +52,10 @@
     const s = MUS.step, [root, tones] = CH[MUS.bar % 4], intro = MUS.bar < 2;
     if (s % 4 === 0) kick(t);
     if (!intro && (s === 4 || s === 12)) noise(t, 0.16, 0.32, 'bandpass', 1700, 0.8);       // Klatschen
-    if (s % 2 === 1) noise(t, 0.035, s % 4 === 3 ? 0.11 : 0.05, 'highpass', 7000);          // Hi-Hat
+    if (s % 4 === 2) noise(t, 0.03, 0.05, 'highpass', 6000);                                 // leise Hi-Hat (nur auf den Off-Beats, kein Dauerrauschen)
     if (BASS.includes(s)) voice('sawtooth', root, t, STEP * 1.8, 0.2, 420);                     // Bass
     if (s === 0) for (const f of tones) voice('triangle', f, t, STEP * 15, 0.035, 1400);        // Flächen-Akkord
-    if (!intro && s % 2 === 0) voice('square', tones[ARP[(s / 2) % 8]] * 2, t, STEP * 0.9, 0.022, 2600);   // Arpeggio
+    if (!intro && s % 2 === 0) voice('triangle', tones[ARP[(s / 2) % 8]], t, STEP * 0.9, 0.03, 1500);   // weiches Arpeggio (tiefer, ohne Quietschen)
   }
   function schedule() {
     if (!ready() || !MUS.gain) return;
