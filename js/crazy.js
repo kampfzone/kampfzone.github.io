@@ -68,11 +68,10 @@
       try { navigator.clipboard.writeText(link || roomCode); cp.textContent = '✓'; } catch (e) { cp.textContent = link || roomCode; }
       setTimeout(() => cp.textContent = 'Einladungslink kopieren', 1800);
     };
-    // „Laden fertig“, sobald das Gras der Karte vorbereitet ist (oder spätestens nach 25 s)
+    // „Laden fertig“, sobald die Grafik (Texturen, Himmel) da ist – das Gras lädt danach im Hintergrund weiter (spätestens nach 15 s)
     const t0 = performance.now(), ld = setInterval(() => {
-      const st = window.grassLoadState ? grassLoadState() : null;
-      if (!st || st.geladen >= st.gesamt || performance.now() - t0 > 25000 || running) { clearInterval(ld); try { SDK.game.loadingStop(); } catch (e) {} }
-    }, 500);
+      if (window.KZ_GFX_READY || performance.now() - t0 > 15000 || running) { clearInterval(ld); try { SDK.game.loadingStop(); } catch (e) {} }
+    }, 250);
   };
   document.head.appendChild(s);
   // Takt: läuft gerade echtes Spiel? (im Spiel, nicht in Pause/Menü/Rundenende/Werbung)

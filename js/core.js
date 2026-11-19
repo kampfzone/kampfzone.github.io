@@ -16,8 +16,8 @@ if (PORTAL) {
   document.head.appendChild(st);
 }
 
-/* Update-Prüfung: beim Veröffentlichen wird 20261119-163312 durch eine Versionsnummer ersetzt */
-const BUILD = '20261119-163312';
+/* Update-Prüfung: beim Veröffentlichen wird 20261119-164423 durch eine Versionsnummer ersetzt */
+const BUILD = '20261119-164423';
 // Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
 // Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
 const UPD = { newer: null };
@@ -531,7 +531,7 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); ca
 /* ---------- Ladeanzeige ---------- */
 const loadMgr = new THREE.LoadingManager();
 loadMgr.onProgress = (url, n, total) => { const el = $('loadInfo'); if (el) el.textContent = `Grafik wird geladen … ${Math.round(n / total * 100)} %`; };
-loadMgr.onLoad = () => { const el = $('loadInfo'); if (el) el.textContent = 'Grafik geladen ✓'; };
+loadMgr.onLoad = () => { window.KZ_GFX_READY = true; const el = $('loadInfo'); if (el) el.textContent = 'Grafik geladen ✓'; };
 
 /* ---------- Licht ---------- */
 const SUN_DIR = new THREE.Vector3(0.45, 0.7, 0.55).normalize();
