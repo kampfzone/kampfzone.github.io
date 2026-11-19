@@ -490,6 +490,7 @@ function onMyKill(m) {
   else if (streak > 0 && streak % 5 === 0) { reward += 300; bonus = `KILLSERIE ${streak}!`; }
   const multi = ['', '', 'DOPPELKILL!', 'DREIFACHKILL!', 'VIERFACHKILL!', 'MONSTERKILL!'][Math.min(5, multiN)];
   shopState.coins += reward; saveShop(); updateCoins(true);
+  if (window.sndKill) sndKill(multiN);
   showMsg(`${m.head ? 'KOPFSCHUSS! ' : ''}${m.vn} eliminiert  +${reward} Coins`);
   if (multi || bonus) showStreak(multi || bonus, bonus && multi ? bonus : '');
   const h = $('hitmarker'); h.classList.add('head'); h.style.opacity = 1; h.style.transform = 'scale(1.5)';

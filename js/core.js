@@ -16,8 +16,8 @@ if (PORTAL) {
   document.head.appendChild(st);
 }
 
-/* Update-Prüfung: beim Veröffentlichen wird 20261118-200235 durch eine Versionsnummer ersetzt */
-const BUILD = '20261118-200235';
+/* Update-Prüfung: beim Veröffentlichen wird 20261119-163312 durch eine Versionsnummer ersetzt */
+const BUILD = '20261119-163312';
 // Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
 // Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
 const UPD = { newer: null };
@@ -351,8 +351,24 @@ function sndShot(w, vol = 0.5, pos) {
   if (far > 0.04) { const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 900 + 15000 * Math.pow(1 - far, 2.2); src.connect(f); node = f; }   // fern = dumpf
   const g = actx.createGain(); g.gain.value = vol * o.g * P.lvl * (0.92 + Math.random() * 0.16);
   node.connect(g); g.connect(o.node);
-  if (revIn) { const sg = actx.createGain(); sg.gain.value = vol * Math.max(o.g, 0.04) * P.lvl * (0.2 + far * 0.6); node.connect(sg); sg.connect(revIn); }
+  if (revIn) { const sg = actx.createGain(); sg.gain.value = vol * Math.max(o.g, 0.04) * P.lvl * (0.2 + far * 0.6) * (pos ? 1 : 0.55); node.connect(sg); sg.connect(revIn); }
   src.start(t);
+  if (!pos) shotPunch(w, vol);   // eigene Schüsse: knackiger „Punch“ obendrauf (Arcade-Gefühl)
+}
+// Knackiger Anschlag für die eigene Waffe: Klick-Transient + tiefer Punch + kurzer Mitten-Knall
+function shotPunch(w, vol) {
+  if (w === 12) return;   // Flammenwerfer
+  const t = actx.currentTime, heavy = w === 1 || w === 2 || w === 8 || w === 10, light = w === 3 || w === 9, sil = w === 4, v = vol * (sil ? 0.45 : 1);
+  const n = noiseSrc(), hp = actx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = sil ? 4000 : 2600;
+  const gn = actx.createGain(); gn.gain.setValueAtTime(v * 0.75, t); gn.gain.exponentialRampToValueAtTime(0.001, t + 0.022);
+  n.connect(hp); hp.connect(gn); gn.connect(master); n.start(t, Math.random()); n.stop(t + 0.03);
+  const o = actx.createOscillator(); o.type = 'sine'; const f0 = heavy ? 135 : light ? 230 : 175, dur = heavy ? 0.14 : light ? 0.06 : 0.085;
+  o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(42, t + dur);
+  const go = actx.createGain(); go.gain.setValueAtTime(v * (heavy ? 1.15 : 0.85), t); go.gain.exponentialRampToValueAtTime(0.001, t + dur * 1.3);
+  o.connect(go); go.connect(master); o.start(t); o.stop(t + dur * 1.4);
+  const n2 = noiseSrc(), bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = light ? 1900 : heavy ? 900 : 1300; bp.Q.value = 0.8;
+  const g2 = actx.createGain(); g2.gain.setValueAtTime(v * 0.65, t); g2.gain.exponentialRampToValueAtTime(0.001, t + (heavy ? 0.09 : 0.055));
+  n2.connect(bp); bp.connect(g2); g2.connect(master); n2.start(t, Math.random()); n2.stop(t + 0.1);
 }
 /* ---------- Umgebungsgeräusche: Wind in Böen (höher oben lauter), Vögel auf dem Land, Stadtrauschen in der Stadt ---------- */
 const AMB = { on: false, bird: 3 };
@@ -400,13 +416,17 @@ function sndShotOld(w, vol = 0.5, pos) {
   const g3 = actx.createGain(); g3.gain.setValueAtTime(0.0001, t); g3.gain.linearRampToValueAtTime(v * 0.2, t + 0.04); g3.gain.exponentialRampToValueAtTime(0.001, t + 0.6 + far * 0.6);
   tail.connect(f3); f3.connect(g3); g3.connect(o.node); tail.start(t, Math.random() * 0.4); tail.stop(t + 1.3);
 }
+// Schritt: dumpfer Absatz + knackiges Abrollen der Sohle (klar hörbar, jeder Schritt etwas anders)
 function sndStep(vol, pos) {
   if (!actx || vol < 0.005) return;
-  const o = spatialOut(pos, 30), v = vol * (pos ? 1 : 1);
-  const t = actx.currentTime, src = noiseSrc();
-  const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 260 + Math.random() * 120;
-  const g = actx.createGain(); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
-  src.connect(f); f.connect(g); g.connect(o.node); src.start(t, Math.random() * 1.5); src.stop(t + 0.1);
+  const o = spatialOut(pos, 30); if (o.g <= 0.005) return;
+  const v = vol * o.g * 1.3, t = actx.currentTime;
+  const s1 = noiseSrc(), f1 = actx.createBiquadFilter(); f1.type = 'lowpass'; f1.frequency.value = 170 + Math.random() * 70;
+  const g1 = actx.createGain(); g1.gain.setValueAtTime(v * 1.4, t); g1.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+  s1.connect(f1); f1.connect(g1); g1.connect(o.node); s1.start(t, Math.random() * 1.5); s1.stop(t + 0.08);
+  const s2 = noiseSrc(), f2 = actx.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = 2200 + Math.random() * 1600; f2.Q.value = 1.4;
+  const g2 = actx.createGain(), t2 = t + 0.012 + Math.random() * 0.01; g2.gain.setValueAtTime(0.0001, t); g2.gain.setValueAtTime(v * 0.55, t2); g2.gain.exponentialRampToValueAtTime(0.001, t2 + 0.035);
+  s2.connect(f2); f2.connect(g2); g2.connect(o.node); s2.start(t, Math.random() * 1.5); s2.stop(t2 + 0.045);
 }
 function sndBeep(freq, len, vol = 0.15, type = 'square') {
   if (!actx) return;
@@ -441,10 +461,24 @@ function sndSlide() {
   const g = actx.createGain(); g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
   src.connect(f); f.connect(g); g.connect(master); src.start(t, Math.random()); src.stop(t + 0.75);
 }
+// Treffer: kurzes, trockenes „Tick“ · Kopfschuss: hell klingendes „Ding“
 function sndHit(head) {
   if (!actx) return;
-  sndBeep(head ? 1700 : 1100, 0.05, 0.1, 'triangle');
-  if (head) setTimeout(() => sndBeep(2400, 0.12, 0.06, 'sine'), 30);
+  const t = actx.currentTime, n = noiseSrc(), bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 3200; bp.Q.value = 2;
+  const g = actx.createGain(); g.gain.setValueAtTime(0.32, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+  n.connect(bp); bp.connect(g); g.connect(master); n.start(t, Math.random()); n.stop(t + 0.04);
+  sndBeep(head ? 1500 : 980, 0.045, 0.07, 'triangle');
+  if (head) for (const [f, d, a] of [[2637, 0.35, 0.07], [3951, 0.25, 0.035]]) { const o = actx.createOscillator(), go = actx.createGain(); o.type = 'sine'; o.frequency.value = f; go.gain.setValueAtTime(a, t + 0.01); go.gain.exponentialRampToValueAtTime(0.001, t + d); o.connect(go); go.connect(master); o.start(t + 0.01); o.stop(t + d + 0.02); }
+}
+// Eliminierung: zwei aufsteigende Töne (je Mehrfachkill höher)
+function sndKill(n = 1) {
+  if (!actx) return;
+  const t = actx.currentTime, base = 660 * Math.pow(1.122, Math.min(4, n - 1));
+  [[base, 0], [base * 1.5, 0.07]].forEach(([f, dt]) => {
+    const o = actx.createOscillator(), o2 = actx.createOscillator(), g = actx.createGain(); o.type = 'triangle'; o2.type = 'sine'; o.frequency.value = f; o2.frequency.value = f * 2;
+    g.gain.setValueAtTime(0.0001, t + dt); g.gain.linearRampToValueAtTime(0.13, t + dt + 0.008); g.gain.exponentialRampToValueAtTime(0.001, t + dt + 0.28);
+    o.connect(g); o2.connect(g); g.connect(master); o.start(t + dt); o2.start(t + dt); o.stop(t + dt + 0.3); o2.stop(t + dt + 0.3);
+  });
 }
 function sndBoom(pos) {
   if (!actx) return;
