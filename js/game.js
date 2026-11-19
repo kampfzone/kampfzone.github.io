@@ -448,7 +448,7 @@ function tryShoot(now) {
   if (w.flame) flameFx(mz, _f);
   for (const pid in dmgBy) net.send({ t: 'hit', target: pid, dmg: Math.round(dmgBy[pid].dmg), w: me.weapon, head: dmgBy[pid].head });
   if (anyHit) showHitmarker(anyHead);
-  net.send({ t: 'shot', id: myId, w: me.weapon, o: [+mz.x.toFixed(2), +mz.y.toFixed(2), +mz.z.toFixed(2)], e: ends });
+  net.send({ t: 'shot', id: myId, w: me.weapon, o: [+mz.x.toFixed(2), +mz.y.toFixed(2), +mz.z.toFixed(2)], e: ends, s: window.attSil && attSil(me.weapon) ? 1 : 0 });   // s = Schalldämpfer
   // Rückstoß: ein Teil bleibt (Waffe steigt), ein Teil federt zurück
   // beim Zielen bleibt die Waffe fast ruhig (nur ein Hauch Rückstoß)
   const aimS = me.scoped ? 0.12 : 1;

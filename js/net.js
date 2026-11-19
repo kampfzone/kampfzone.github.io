@@ -435,8 +435,8 @@ function clientHandle(m) {
       const h = rayMap(o, dir, len + 0.1);
       if (h && h.dist > len - 0.3) impactFx(h.point, h.normal);
     }
-    sndShot(m.w || 0, 0.5, o);
-    radarPing[m.id] = performance.now();
+    if (m.s) sndShot(4, 0.3, o);   // mit Schalldämpfer: leise und nicht auf dem Radar
+    else { sndShot(m.w || 0, 0.5, o); radarPing[m.id] = performance.now(); }
     if (avatars[m.id]) avatars[m.id].kick = 1;
   } else if (m.t === 'nade') {
     if (m.id !== myId) startNade(m.i, new THREE.Vector3(...m.o), new THREE.Vector3(...m.v), false, m.imp);
