@@ -16,8 +16,8 @@ if (PORTAL) {
   document.head.appendChild(st);
 }
 
-/* Update-Prüfung: beim Veröffentlichen wird 20261119-164955 durch eine Versionsnummer ersetzt */
-const BUILD = '20261119-164955';
+/* Update-Prüfung: beim Veröffentlichen wird 20261119-183251 durch eine Versionsnummer ersetzt */
+const BUILD = '20261119-183251';
 // Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
 // Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
 const UPD = { newer: null };
@@ -416,17 +416,79 @@ function sndShotOld(w, vol = 0.5, pos) {
   const g3 = actx.createGain(); g3.gain.setValueAtTime(0.0001, t); g3.gain.linearRampToValueAtTime(v * 0.2, t + 0.04); g3.gain.exponentialRampToValueAtTime(0.001, t + 0.6 + far * 0.6);
   tail.connect(f3); f3.connect(g3); g3.connect(o.node); tail.start(t, Math.random() * 0.4); tail.stop(t + 1.3);
 }
-// Schritt: dumpfer Absatz + knackiges Abrollen der Sohle (klar hörbar, jeder Schritt etwas anders)
+/* ---------- Schritte: vorberechnete Klänge je Untergrund (je 8 Varianten) ----------
+   Asphalt/Beton: Absatz (kurzer Klick + tiefer Stoß + Körnung), danach das Abrollen der Sohle (heller Schurf) und feine Steinchen.
+   Gras: weicher Stoß, Rascheln vieler Halme. Holz/Metall (Böden, Rampen, Dächer): dumpf-hohler bzw. leicht klingender Ton.
+   Eigene Schritte abwechselnd etwas links/rechts; Rennen kräftiger, Landen schwerer. */
+const STEP_BUF = {};
+function biq(x, type, f, Q, sr) {   // einfacher Filter (Tiefpass/Hochpass/Bandpass) für die Vorberechnung
+  const w = 2 * Math.PI * f / sr, cs = Math.cos(w), al = Math.sin(w) / (2 * Q);
+  let b0, b1, b2; const a0 = 1 + al, a1 = -2 * cs, a2 = 1 - al;
+  if (type === 'lp') { b0 = (1 - cs) / 2; b1 = 1 - cs; b2 = b0; } else if (type === 'hp') { b0 = (1 + cs) / 2; b1 = -(1 + cs); b2 = b0; } else { b0 = al; b1 = 0; b2 = -al; }
+  const y = new Float32Array(x.length); let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (let i = 0; i < x.length; i++) { const v = (b0 * x[i] + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2) / a0; x2 = x1; x1 = x[i]; y2 = y1; y1 = v; y[i] = v; }
+  return y;
+}
+function synthStep(kind, sr, seed) {
+  let s = seed >>> 0 || 1; const R = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  const grass = kind === 'grass', wood = kind === 'wood', metal = kind === 'metal';
+  const len = grass ? 0.24 : 0.2, n = Math.ceil(len * sr), out = new Float32Array(n), dt = 1 / sr;
+  const wn = () => { const a = new Float32Array(n); for (let i = 0; i < n; i++) a[i] = R() * 2 - 1; return a; };
+  const tToe = 0.04 + R() * 0.025;   // Abrollen nach dem Absatz
+  // Absatz: Rausch-Stoß
+  const heel = biq(wn(), 'bp', grass ? 380 + R() * 120 : wood ? 420 : 750 + R() * 300, grass ? 0.7 : 0.9, sr);
+  // Abrollen: heller Schurf
+  const toe = biq(wn(), 'bp', grass ? 1600 + R() * 600 : 2200 + R() * 1200, 1.1, sr);
+  // Körnung (Steinchen) bzw. Rascheln (Halme): viele winzige Klicks
+  const sp = new Float32Array(n), nClick = grass ? 55 : wood || metal ? 3 : 9, span = grass ? 0.16 : 0.09;
+  for (let k = 0; k < nClick; k++) { const i = Math.floor((R() * span + (grass ? 0.005 : 0.004)) * sr); if (i < n) sp[i] += (R() * 2 - 1) * (0.4 + R() * 0.6); }
+  const grit = biq(sp, grass ? 'bp' : 'hp', grass ? 3800 : 3200, grass ? 0.8 : 0.7, sr);
+  const f0 = wood ? 140 : metal ? 160 : grass ? 85 : 105, ring = metal ? 1700 + R() * 400 : 0;
+  let ph = 0, phr = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i * dt;
+    const eh = t < 0.0015 ? t / 0.0015 : Math.exp(-(t - 0.0015) / (grass ? 0.03 : 0.016));
+    let x = heel[i] * eh * (grass ? 1.1 : 1.6);
+    const f = f0 * (0.55 + 0.45 * Math.exp(-t / 0.02)); ph += 2 * Math.PI * f * dt;
+    x += Math.sin(ph) * Math.exp(-t / (wood ? 0.05 : 0.028)) * (grass ? 0.55 : wood ? 0.9 : 0.7);   // tiefer Stoß (Körper)
+    if (t < 0.0012 && !grass) x += (R() * 2 - 1) * (1 - t / 0.0012) * 0.9;                       // Klick der Sohle
+    if (t >= tToe) { const u = t - tToe; x += toe[i] * (u < 0.004 ? u / 0.004 : Math.exp(-(u - 0.004) / (grass ? 0.05 : 0.026))) * (grass ? 0.55 : 0.7); }
+    const ge = grass ? Math.min(1, t / 0.02) * Math.exp(-t / 0.09) : 1;
+    x += grit[i] * (grass ? 2.2 : 1.6) * ge;
+    if (ring) { phr += 2 * Math.PI * ring * dt; x += Math.sin(phr) * Math.exp(-t / 0.06) * 0.12; }
+    out[i] = Math.tanh(x * 1.3);
+  }
+  let pk = 0; for (let i = 0; i < n; i++) pk = Math.max(pk, Math.abs(out[i]));
+  const k = pk > 0 ? 0.9 / pk : 1, fo = Math.floor(sr * 0.015);
+  for (let i = 0; i < n; i++) out[i] *= k * (i > n - fo ? (n - i) / fo : 1);
+  return out;
+}
+function genStepBuffers() {
+  if (!actx) return;
+  const sr = actx.sampleRate;
+  for (const kind of ['hard', 'grass', 'wood', 'metal']) {
+    STEP_BUF[kind] = [];
+    for (let v = 0; v < 8; v++) { const d = synthStep(kind, sr, 777 + v * 131 + kind.length * 9973), b = actx.createBuffer(1, d.length, sr); b.getChannelData(0).set(d); STEP_BUF[kind].push(b); }
+  }
+}
+// Untergrund an einer Stelle: Gras auf den Wiesen/Hügeln der Karte „Welt“, Holz/Metall auf erhöhten Böden, sonst Asphalt/Beton
+function stepSurface(x, y, z) {
+  if (y > 0.35) { const gh = typeof hillH === 'function' ? hillH(x, z) : 0; if (y - gh > 0.35) return y > 3 ? 'metal' : 'wood'; }
+  if (MAP_ID === 'welt' && typeof carOnRoad === 'function' && !carOnRoad(x, z)) return 'grass';
+  return 'hard';
+}
+let stepSide = 1;
 function sndStep(vol, pos) {
   if (!actx || vol < 0.005) return;
+  if (!STEP_BUF.hard) genStepBuffers();
   const o = spatialOut(pos, 30); if (o.g <= 0.005) return;
-  const v = vol * o.g * 1.3, t = actx.currentTime;
-  const s1 = noiseSrc(), f1 = actx.createBiquadFilter(); f1.type = 'lowpass'; f1.frequency.value = 170 + Math.random() * 70;
-  const g1 = actx.createGain(); g1.gain.setValueAtTime(v * 1.4, t); g1.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
-  s1.connect(f1); f1.connect(g1); g1.connect(o.node); s1.start(t, Math.random() * 1.5); s1.stop(t + 0.08);
-  const s2 = noiseSrc(), f2 = actx.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = 2200 + Math.random() * 1600; f2.Q.value = 1.4;
-  const g2 = actx.createGain(), t2 = t + 0.012 + Math.random() * 0.01; g2.gain.setValueAtTime(0.0001, t); g2.gain.setValueAtTime(v * 0.55, t2); g2.gain.exponentialRampToValueAtTime(0.001, t2 + 0.035);
-  s2.connect(f2); f2.connect(g2); g2.connect(o.node); s2.start(t, Math.random() * 1.5); s2.stop(t2 + 0.045);
+  const p = pos || (typeof me !== 'undefined' ? me.pos : null), kind = p ? stepSurface(p.x, p.y, p.z) : 'hard', set = STEP_BUF[kind] || STEP_BUF.hard;
+  const t = actx.currentTime, src = actx.createBufferSource(); src.buffer = set[Math.floor(Math.random() * set.length)];
+  src.playbackRate.value = (vol > 0.12 ? 0.85 : 0.94) + Math.random() * 0.12;   // schwere Landung tiefer
+  const g = actx.createGain(); g.gain.value = Math.min(0.6, vol * 3.2) * o.g * (kind === 'grass' ? 0.85 : 1);
+  let node = g;
+  if (!pos && actx.createStereoPanner) { stepSide = -stepSide; const pn = actx.createStereoPanner(); pn.pan.value = stepSide * 0.14; g.connect(pn); node = pn; }
+  src.connect(g); node.connect(o.node); src.start(t);
 }
 function sndBeep(freq, len, vol = 0.15, type = 'square') {
   if (!actx) return;
