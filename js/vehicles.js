@@ -1094,7 +1094,7 @@ function updateRide(dt) {
     ride.vel.x = Math.cos(ride.yaw) * ride.speed; ride.vel.z = -Math.sin(ride.yaw) * ride.speed;
     let d = (me.yaw + Math.PI / 2 - ride.yaw) - (ride.turret || 0); d = Math.atan2(Math.sin(d), Math.cos(d));
     ride.turret = Math.max(-0.45, Math.min(0.45, (ride.turret || 0) + Math.max(-0.35 * dt, Math.min(0.35 * dt, d))));
-    const pt = Math.max(0.05, Math.min(0.9, me.pitch + 0.35));
+    const pt = Math.max(-0.12, Math.min(0.9, me.pitch + 0.35));   // auch flach / leicht nach unten (Ziele in der Nähe)
     ride.barrelP = (ride.barrelP || 0) + Math.max(-0.25 * dt, Math.min(0.25 * dt, pt - (ride.barrelP || 0)));
     ride.st = ride.turret;
   } else if (isTank) {   // Panzer: dreht auch im Stand (Ketten gegenläufig), Turm folgt der Blickrichtung
