@@ -54,7 +54,18 @@ function attApply(i) {
 WEAPONS.forEach((w, i) => attApply(i));
 
 /* --- Aufsätze als Modellteile (Waffen-Koordinaten: Lauf nach -z, Mündung bei (0, muzzleY, -len)) --- */
-function attParts(i, gi) {
+const _attSide = new Map();
+const ATT_SIDE = m => { let s = _attSide.get(m); if (!s) { s = m.clone(); s.side = THREE.DoubleSide; _attSide.set(m, s); } return s; };
+// höchster Punkt der Waffe im Bereich der Visiermontage (Waffen-Koordinaten)
+function attTop(group, sy) {
+  let top = null; const bx = new THREE.Box3();
+  group.traverse(o => { if (!o.isMesh) return; o.updateMatrix(); if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    bx.copy(o.geometry.boundingBox).applyMatrix4(o.matrix);
+    if (bx.max.z < -0.14 || bx.min.z > 0.03 || bx.max.y > sy + 0.06) return;
+    if (top == null || bx.max.y > top) top = bx.max.y; });
+  return top;
+}
+function attParts(i, gi, top) {
   const M = GUN_MATS, P = [], eq = attOf(i);
   const box = (w, h, d, mat, x, y, z) => ({ geo: new THREE.BoxGeometry(w, h, d), mat, p: [x, y, z], r: [0, 0, 0] });
   const cyl = (r1, r2, len, mat, x, y, z) => ({ geo: new THREE.CylinderGeometry(r1, r2, len, 16), mat, p: [x, y, z], r: [Math.PI / 2, 0, 0] });
@@ -64,10 +75,18 @@ function attParts(i, gi) {
   else if (eq.muz === 'comp') { P.push(cyl(0.016, 0.016, 0.06, M.metal, 0, my, -L - 0.03)); for (const dz of [-0.018, -0.036]) P.push(box(0.034, 0.006, 0.008, M.dark, 0, my + 0.012, -L + dz)); muzzleZ = -L - 0.06; }
   else if (eq.muz === 'brake') { P.push(box(0.042, 0.03, 0.07, M.metal, 0, my, -L - 0.035)); for (const dz of [-0.015, -0.035, -0.055]) P.push(box(0.044, 0.008, 0.008, M.dark, 0, my, -L - 0.035 + dz + 0.035)); muzzleZ = -L - 0.07; }
   let sight = sy;
-  if (!WEAPONS[i].scope) {
-    if (eq.opt === 'red') { P.push(box(0.03, 0.012, 0.05, M.metal, 0, sy + 0.004, -0.06), cyl(0.016, 0.016, 0.055, M.metal, 0, sy + 0.028, -0.06), cyl(0.0145, 0.0145, 0.002, GUN_MATS.lens || M.dark, 0, sy + 0.028, -0.089)); sight = sy + 0.028; }
-    else if (eq.opt === 'holo') { P.push(box(0.034, 0.012, 0.08, M.metal, 0, sy + 0.004, -0.06), box(0.05, 0.042, 0.07, M.metal, 0, sy + 0.03, -0.06), box(0.036, 0.028, 0.072, M.dark, 0, sy + 0.032, -0.06)); sight = sy + 0.032; }
-    else if (eq.opt === 'acog') { P.push(box(0.03, 0.014, 0.09, M.metal, 0, sy + 0.005, -0.06), cyl(0.02, 0.02, 0.15, M.metal, 0, sy + 0.034, -0.06), cyl(0.02, 0.026, 0.04, M.metal, 0, sy + 0.034, -0.155), cyl(0.012, 0.012, 0.03, M.steel, 0, sy + 0.06, -0.06)); sight = sy + 0.034; }
+  if (!WEAPONS[i].scope && eq.opt) {
+    // Montage oben auf der höchsten Stelle der Waffe (über Kimme/Tragegriff), damit nichts ineinander steckt
+    const b = Math.max(sy - 0.012, top == null ? sy - 0.012 : top);
+    const tube = (r, len, z, y) => ({ geo: new THREE.CylinderGeometry(r, r, len, 20, 1, true), mat: ATT_SIDE(M.metal), p: [0, y, z], r: [Math.PI / 2, 0, 0] });
+    const ring = (r, y, z) => ({ geo: new THREE.TorusGeometry(r, 0.0025, 6, 20), mat: M.metal, p: [0, y, z], r: [0, 0, 0] });
+    const dot = (y, z, s) => ({ geo: new THREE.SphereGeometry(s, 8, 6), mat: ATT_RED, p: [0, y, z], r: [0, 0, 0] });
+    if (eq.opt === 'red') { const y = b + 0.03; P.push(box(0.026, 0.014, 0.05, M.metal, 0, b + 0.007, -0.06), box(0.012, 0.012, 0.03, M.metal, 0, b + 0.016, -0.06), tube(0.017, 0.05, -0.06, y), ring(0.017, y, -0.035), ring(0.017, y, -0.085), dot(y, -0.085, 0.0012)); sight = y; }
+    else if (eq.opt === 'holo') { const y = b + 0.03; P.push(box(0.034, 0.014, 0.08, M.metal, 0, b + 0.007, -0.06), box(0.05, 0.006, 0.07, M.metal, 0, b + 0.014, -0.06),
+      box(0.005, 0.034, 0.012, M.metal, -0.024, y, -0.09), box(0.005, 0.034, 0.012, M.metal, 0.024, y, -0.09), box(0.053, 0.005, 0.012, M.metal, 0, y + 0.018, -0.09),
+      box(0.005, 0.03, 0.01, M.metal, -0.024, y - 0.002, -0.035), box(0.005, 0.03, 0.01, M.metal, 0.024, y - 0.002, -0.035), dot(y, -0.09, 0.0012)); sight = y; }
+    else if (eq.opt === 'acog') { const y = b + 0.034; P.push(box(0.03, 0.016, 0.09, M.metal, 0, b + 0.008, -0.06), tube(0.02, 0.15, -0.06, y), tube(0.025, 0.04, -0.155, y), ring(0.02, y, 0.015), ring(0.025, y, -0.175),
+      box(0.0012, 0.03, 0.0008, M.dark, 0, y - 0.012, -0.12), box(0.016, 0.0012, 0.0008, M.dark, 0, y, -0.12), dot(y + 0.002, -0.12, 0.001)); sight = y; }
   }
   const fo = gi.fore || [0, 0, -0.3];
   const gTop = Math.min(my - 0.028, fo[1] + 0.01);   // Unterkante des Handschutzes
@@ -98,7 +117,7 @@ const _buildViewGun = buildViewGun;
 buildViewGun = function (w) {
   _buildViewGun(w);
   if (!attWeapon(w) || !gunInfo) return;
-  const a = attParts(w, gunInfo);
+  const a = attParts(w, gunInfo, attTop(vm.main, gunInfo.sight));
   if (a.parts.length) { vm.att = partsToGroup(a.parts); viewGun.add(vm.att); }
   muzzle.position.z = a.muzzleZ; gunInfo.sight = a.sight;
   if (attOf(w).mag === 'ext' && vm.mag) longMag(vm.mag);
@@ -197,7 +216,7 @@ tryShoot = function (now) {
     }
     if (prev.g) prev.sc.remove(prev.g);
     const gi = makeGun(cur), g = new THREE.Group(), main = partsToGroup(gi.parts.filter(p => !p.mag)), mag = partsToGroup(gi.parts.filter(p => p.mag));
-    g.add(main, mag); const a = attParts(cur, gi); if (a.parts.length) g.add(partsToGroup(a.parts));
+    g.add(main, mag); const a = attParts(cur, gi, attTop(main, gi.sight)); if (a.parts.length) g.add(partsToGroup(a.parts));
     if (attOf(cur).mag === 'ext') longMag(mag);
     attPaint(main, cur); attPaint(mag, cur);
     const box = new THREE.Box3().setFromObject(g), c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3()).length();
