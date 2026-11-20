@@ -3053,7 +3053,8 @@ function weltMilitaer(road) {
     { x: RX - 9, z: RZ1 - 32, yaw: Math.PI / 2, kind: 'plane', ctype: 'jet', jt: 0 }, { x: RX + 9, z: RZ1 - 52, yaw: Math.PI / 2, kind: 'plane', ctype: 'jet', jt: 2 },
     { x: 1500, z: -68, yaw: 0, kind: 'plane', ctype: 'jet', jt: 3 }, { x: 1500, z: 68, yaw: 0, kind: 'plane', ctype: 'jet', jt: 1 },
     { x: 1436, z: -225, yaw: 0, kind: 'plane', ctype: 'jet', jt: 3 },
-    { x: 1300, z: -18, yaw: -Math.PI / 2, kind: 'tank' }, { x: 1336, z: -18, yaw: -Math.PI / 2, kind: 'tank' });
+    { x: 1300, z: -18, yaw: -Math.PI / 2, kind: 'tank' }, { x: 1336, z: -18, yaw: -Math.PI / 2, kind: 'tank' },
+    { x: 1405, z: -327, yaw: Math.PI, kind: 'tank', ctype: 'gustav' });   // Schwerer Gustav auf Gleisen am Nordrand
   window.MAP_STREETS.push([MIL.GATE - 4, -4.5, 1468, 4.5], [1256, Z0 + 30, 1264, Z1 - 30], [RX - RW / 2, RZ0, RX + RW / 2, RZ1], [TX - 9, RZ0, TX + 9, RZ1],
     [1468, -130, 1536, 130], ...[RZ0 + 30, 0, RZ1 - 30].map(z => [TX, z - 9, RX - RW / 2, z + 9]), ...[-285, -225, -165, 165, 225, 285].map(z => [1424, z - 11, TX - 9, z + 11]));
   (window.MAP_POIS = window.MAP_POIS || []).push({ x: 1228, z: -34, t: '⭐' }, { x: RX, z: RZ1 - 40, t: '🛩' }, { x: 1385, z: 80, t: '🚁' });

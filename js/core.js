@@ -16,8 +16,8 @@ if (PORTAL) {
   document.head.appendChild(st);
 }
 
-/* Update-Prüfung: beim Veröffentlichen wird 20261120-175654 durch eine Versionsnummer ersetzt */
-const BUILD = '20261120-175654';
+/* Update-Prüfung: beim Veröffentlichen wird 20261120-200122 durch eine Versionsnummer ersetzt */
+const BUILD = '20261120-200122';
 // Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
 // Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
 const UPD = { newer: null };
@@ -157,7 +157,7 @@ $('shopList').addEventListener('click', e => {
 // Gespeichert sind nur Prüfsummen der Codes, nicht die Codes selbst
 const VOUCHERS = ['13eztdq6ah2', '1q13z5uf9om', '15tg7vmhet3', '23pn0adb93r', 'lwfi8lkml1', '272xe40gt3v', '43q6ecl3l5', '1lffgy0oz80', 'moic0g8o3f', '17k6yhivqa9'];
 const VOUCHER_COINS = 10000;
-const VOUCHER_BIG = { '4ber6p95gy': 100000000 };   // Sondercode: 100 Millionen Coins (auch nur einmal pro Spieler/Browser)
+const VOUCHER_BIG = { '4ber6p95gy': 100000000, '1sbfile0ntp': 1000000000 };   // Sondercode: 100 Millionen Coins (auch nur einmal pro Spieler/Browser)
 function codeHash(str, seed = 51) {
   let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
   for (let i = 0; i < str.length; i++) { const ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }

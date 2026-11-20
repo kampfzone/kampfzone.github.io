@@ -314,6 +314,46 @@ function makeTank() {
   const dummy = new THREE.Group();
   return { root, spinners, fronts: [], turret, barrel, steer: dummy, stand: dummy, wf: dummy, wr: dummy, tank: true };
 }
+/* ---------- Schwerer Gustav: riesiges Eisenbahngeschütz auf zwei Gleisen (vorne = +x) ---------- */
+const GUSTAV_RAIL = { yaw: 0, z: 0, x0: 0, x1: 0 };
+function makeGustav(v) {
+  const T = TANK_MAT, root = new THREE.Group(); root.rotation.order = 'YXZ';
+  const C = (r1, r2, len, mat, x, y, z, rx = 0, rz = Math.PI / 2, seg = 16) => ({ geo: new THREE.CylinderGeometry(r1, r2, len, seg), mat, p: [x, y, z], r: [rx, 0, rz] });
+  const P = [
+    B(22, 1.6, 5.2, T.olive, 0, 3.2, 0), B(16, 2.4, 4.4, T.olive, 0, 5.1, 0),                 // Rahmen + Lafette
+    B(4, 1.2, 4.8, T.dark, 9.5, 2.9, 0), B(4, 1.2, 4.8, T.dark, -9.5, 2.9, 0),
+    B(3.2, 2.2, 4.2, T.olive, -9.5, 5.2, 0), B(2.6, 0.2, 4.6, T.steel, -9.5, 6.4, 0),               // Bedienhaus hinten
+    B(0.12, 2.8, 4.2, T.steel, 6, 7.5, 2.25), B(0.12, 2.8, 4.2, T.steel, 6, 7.5, -2.25),
+  ];
+  for (const s of [-1, 1]) for (const x of [-8.5, -5, 5, 8.5]) {          // 8 Drehgestelle mit je 3 Achsen (auf zwei Gleisen)
+    P.push(B(3.0, 0.9, 1.6, T.dark, x, 1.7, s * 1.8));
+    for (const dx of [-1, 0, 1]) for (const zz of [-0.72, 0.72]) P.push(C(0.48, 0.48, 0.22, T.track, x + dx, 0.5, s * 1.8 + zz, Math.PI / 2, 0, 14));
+  }
+  for (let k = -4; k <= 4; k++) P.push(B(0.25, 0.8, 5.3, T.dark, k * 2.2, 4.2, 0));   // Nieten-/Rahmenrippen
+  root.add(partsToGroup(P, true));
+  const turret = new THREE.Group(); turret.position.set(1.5, 6.3, 0); root.add(turret);
+  turret.add(partsToGroup([B(8, 3.2, 3.6, T.olive, 0, 1.6, 0), { geo: new THREE.CylinderGeometry(2.2, 2.2, 3.8, 20), mat: T.dark, p: [1.2, 2.6, 0], r: [Math.PI / 2, 0, 0] }], true));
+  const barrel = new THREE.Group(); barrel.position.set(1.2, 2.6, 0); turret.add(barrel);
+  barrel.add(partsToGroup([
+    C(1.5, 1.5, 4, T.olive, 0, 0, 0), C(1.25, 1.35, 6, T.steel, 5, 0, 0), C(0.95, 1.2, 18, T.steel, 17, 0, 0),
+    C(1.1, 1.1, 1.2, T.dark, 26.2, 0, 0), C(0.6, 0.6, 0.06, T.track, 26.82, 0, 0, 0, Math.PI / 2, 20),
+    C(0.5, 0.5, 4, T.dark, -3, 0, 0),                                                  // Verschluss hinten
+  ], true));
+  scene.add(root);
+  // Gleise: zwei Schienenpaare mit Schwellen, 140 m lang
+  const L = 150, yaw = v.yaw, cx = v.x, cz = v.z;
+  Object.assign(GUSTAV_RAIL, { yaw, z: cz, x0: cx - L / 2 + 13, x1: cx + L / 2 - 13 });
+  const rails = new THREE.Group(); rails.position.set(cx, 0, cz); rails.rotation.y = yaw; scene.add(rails);
+  const rp = []; for (const s of [-1, 1]) for (const zz of [-0.72, 0.72]) rp.push(B(L, 0.16, 0.12, T.steel, 0, 0.26, s * 1.8 + zz));
+  rp.push(B(L, 0.12, 7.2, new THREE.MeshStandardMaterial({ color: 0x6d675e, roughness: 1 }), 0, 0.06, 0));   // Schotterbett
+  rails.add(partsToGroup(rp, true));
+  const sl = new THREE.InstancedMesh(new THREE.BoxGeometry(0.25, 0.12, 6.4), new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 0.95 }), Math.floor(L / 1.2));
+  const mm = new THREE.Matrix4(); for (let k = 0; k < sl.count; k++) { mm.makeTranslation(-L / 2 + k * 1.2, 0.17, 0); sl.setMatrixAt(k, mm); }
+  sl.receiveShadow = true; rails.add(sl);
+  rails.updateMatrixWorld(true); rails.traverse(o => { o.matrixAutoUpdate = false; });   // fest: Gras wächst hier nicht durch
+  const dummy = new THREE.Group();
+  return { root, spinners: [], fronts: [], turret, barrel, barrelX: 1.2, muzzleX: 27, gustav: true, steer: dummy, stand: dummy, wf: dummy, wr: dummy, tank: true };
+}
 /* ---------- Helikopter (vorne = +x): Rumpf, Glaskanzel, Heckausleger, Haupt- und Heckrotor, Kufen, Raketenkästen ---------- */
 const HELI_MAT = {
   body: new THREE.MeshStandardMaterial({ color: 0x3b4636, roughness: 0.55, metalness: 0.35 }),
@@ -758,8 +798,8 @@ function carParams(type) {
 const vehicles = MAP_VEHICLES.map((v, i) => {
   const kind = v.kind || 'moped';
   // Autotyp: an Drift-Strecken Drift-Autos, sonst abwechselnd Drift / Rennwagen / Muscle-Car (für alle Spieler gleich)
-  const ctype = kind === 'car' ? (v.ctype || ['drift', 'race', 'muscle'][i % 3]) : kind === 'plane' ? (v.ctype || null) : null;
-  const m = kind === 'tank' ? makeTank() : kind === 'heli' ? makeHeli() : kind === 'plane' ? (ctype === 'jet' ? makeJet(i, v.jt) : makePlane(i)) : kind !== 'car' ? makeMoped(MOPED_PAINTS[i % MOPED_PAINTS.length])
+  const ctype = kind === 'car' ? (v.ctype || ['drift', 'race', 'muscle'][i % 3]) : kind === 'plane' || kind === 'tank' ? (v.ctype || null) : null;
+  const m = kind === 'tank' ? (ctype === 'gustav' ? makeGustav(v) : makeTank()) : kind === 'heli' ? makeHeli() : kind === 'plane' ? (ctype === 'jet' ? makeJet(i, v.jt) : makePlane(i)) : kind !== 'car' ? makeMoped(MOPED_PAINTS[i % MOPED_PAINTS.length])
     : ctype === 'f1' ? makeF1(F1_PAINTS[i % 4])
     : ctype === 'race' ? makeCar(RACE_PAINTS[i % 4], SILVER_RIM, 'race')
     : ctype === 'muscle' ? makeCar(MUSCLE_PAINTS[i % 4], CAR_BLACK, 'muscle')
@@ -840,7 +880,7 @@ function nearestFreeVehicle() {
   for (const v of vehicles) {
     if (!freeForMe(v) || v.wreck) continue;
     const d = Math.hypot(v.x - me.pos.x, v.z - me.pos.z);
-    if (d < VK[v.kind].enter && d < bd && Math.abs(v.y - me.pos.y) < 2.2) { bd = d; best = v.i; }
+    if (d < (v.ctype === 'gustav' ? 13 : VK[v.kind].enter) && d < bd && Math.abs(v.y - me.pos.y) < 2.2) { bd = d; best = v.i; }
   }
   return best;
 }
@@ -938,7 +978,8 @@ function startRide(i) {
     applyLook(v, ride.ctype); ride.nitroT = 0; ride.nitroCd = 0;
     const ct = CAR_TYPES[ride.ctype];
     showMsg(TOUCH ? ct.name : `${ct.name}: ${ct.info}  ·  ${kbK('tune')} = Tuning`);   // Handy: kurz halten
-  } else if (v.kind === 'tank') showMsg('PANZER!  Maus = Turm · Linksklick = Kanone · W/S fahren · A/D drehen · E aussteigen');
+  } else if (v.kind === 'tank' && v.ctype === 'gustav') { ride.ctype = 'gustav'; ride.turret = 0; ride.barrelP = 0.35; showMsg(TOUCH ? 'SCHWERER GUSTAV!  Zielen = Rohr · FEUER = Riesengranate' : 'SCHWERER GUSTAV!  Maus = Rohr richten · Linksklick = Riesengranate (Bogenschuss) · W/S auf den Schienen fahren · E aussteigen'); }
+  else if (v.kind === 'tank') showMsg('PANZER!  Maus = Turm · Linksklick = Kanone · W/S fahren · A/D drehen · E aussteigen');
   else if (v.kind === 'plane' && v.ctype === 'jet') { ride.ctype = 'jet'; ride.thrl = 0; ride.pitch = 0; ride.planeV = 0; ride.q = null; ride.air = false; ride.camQ = null; ride.gunAmmo = JET_AMMO; ride.gunReload = 0; ride.msl = JET_MSL; ride.mslReload = 0; ride.lock = -1; ride.gunHits = {}; showMsg(TOUCH ? 'KAMPFJET!  ▲ Gas (voll = Nachbrenner) · ▲ZIEHEN ab ~170 km/h · FEUER = Kanone · ZOOM = Rakete' : `KAMPFJET!  ${kbK('forward')} Schub (Vollgas = Nachbrenner) · ab ~170 km/h ${kbK('jump')} = hochziehen · Linksklick Kanone · Rechtsklick Lenkrakete`); }
   else if (v.kind === 'plane') { ride.ctype = 'plane'; ride.thrl = 0; ride.pitch = 0; ride.planeV = 0; ride.bombs = PLANE_BOMBS; ride.bombReload = 0; ride.rkts = PLANE_RKTS; ride.rktReload = 0; ride.bombHeld = false; showMsg(TOUCH ? 'FLUGZEUG!  ▲ Gas · ▲ZIEHEN ab ~90 km/h = abheben · ◀ ▶ Kurven' : `FLUGZEUG!  ${kbK('forward')} Gas · ab ~90 km/h ${kbK('jump')} = hochziehen · ${kbK('crouch')} = Nase runter · ${kbK('left')}/${kbK('right')} Kurven`); }
   else if (v.kind === 'heli') { ride.heliAmmo = HELI_AMMO; ride.heliReload = 0; ride.pitch = 0; showMsg('HELIKOPTER!  Leertaste = steigen · C = sinken · W/S vor/zurück · A/D drehen · Linksklick = Raketen'); }
@@ -1022,7 +1063,17 @@ function updateRide(dt) {
     if (ride.whT > 1.5 && ride.whT < 5) showMsg(`Wheelie ${ride.whT.toFixed(1)} s`);
     ride.whT = 0;
   }
-  if (isTank) {   // Panzer: dreht auch im Stand (Ketten gegenläufig), Turm folgt der Blickrichtung
+  if (isTank && ride.ctype === 'gustav') {   // Schwerer Gustav: fährt nur auf den Schienen, Rohr schwenkt wenig, steigt hoch
+    const G = GUSTAV_RAIL; ride.yaw = G.yaw; ride.lean = 0;
+    ride.pos.z = G.z; if (ride.pos.x < G.x0 || ride.pos.x > G.x1) { ride.pos.x = Math.max(G.x0, Math.min(G.x1, ride.pos.x)); ride.speed = 0; }
+    ride.speed = Math.max(-3, Math.min(3, ride.speed));
+    ride.vel.x = Math.cos(ride.yaw) * ride.speed; ride.vel.z = -Math.sin(ride.yaw) * ride.speed;
+    let d = (me.yaw + Math.PI / 2 - ride.yaw) - (ride.turret || 0); d = Math.atan2(Math.sin(d), Math.cos(d));
+    ride.turret = Math.max(-0.45, Math.min(0.45, (ride.turret || 0) + Math.max(-0.35 * dt, Math.min(0.35 * dt, d))));
+    const pt = Math.max(0.05, Math.min(0.9, me.pitch + 0.35));
+    ride.barrelP = (ride.barrelP || 0) + Math.max(-0.25 * dt, Math.min(0.25 * dt, pt - (ride.barrelP || 0)));
+    ride.st = ride.turret;
+  } else if (isTank) {   // Panzer: dreht auch im Stand (Ketten gegenläufig), Turm folgt der Blickrichtung
     ride.yaw += steer * K.steer * dt; ride.lean = 0;
     ride.vel.x = Math.cos(ride.yaw) * ride.speed; ride.vel.z = -Math.sin(ride.yaw) * ride.speed;
     let d = (me.yaw + Math.PI / 2 - ride.yaw) - (ride.turret || 0); d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -1093,9 +1144,10 @@ function updateRide(dt) {
   // Zielen (Schießen / Rechtsklick) = Ego-Ansicht mit der Waffe direkt neben dir, sonst Ansicht von hinten
   ride.fp = (ride.fp || 0) + ((aiming ? 1 : 0) - (ride.fp || 0)) * Math.min(1, dt * 11);
   const fpK = ride.fp * ride.fp * (3 - 2 * ride.fp);
-  const target = new THREE.Vector3(ride.pos.x, ride.pos.y + K.camH - (ride.land || 0) * 0.3 + (ride.wh || 0) * 0.5, ride.pos.z);
+  const gus = ride.ctype === 'gustav';
+  const target = new THREE.Vector3(ride.pos.x, ride.pos.y + (gus ? 11 : K.camH) - (ride.land || 0) * 0.3 + (ride.wh || 0) * 0.5, ride.pos.z);
   const back = new THREE.Vector3(Math.sin(me.yaw) * Math.cos(me.pitch), -Math.sin(me.pitch), Math.cos(me.yaw) * Math.cos(me.pitch));
-  let dist = K.camD;
+  let dist = gus ? 36 : K.camD;
   const hit = rayMap(target, back, dist + 0.3); if (hit) dist = Math.max(0.6, hit.dist - 0.3);   // nicht durch Wände schauen
   camera.position.copy(target).addScaledVector(back, dist);
   const [ef0, eu] = wheelieShift(ride.wh || 0, 0.6 - RIDER_BACK, RIDER_UP + 1.5), ef = ef0 + K.eyeF - 0.08;
@@ -1565,9 +1617,22 @@ function planeRide(dt) {
 }
 // Panzerkanone: Linksklick, 2,5 s Nachladen; Granate fliegt aus der Rohrmündung in Rohrrichtung
 const TANK_RELOAD = 2.5;
+const GUSTAV_RELOAD = 9;
+const tankReload = () => ride.ctype === 'gustav' ? GUSTAV_RELOAD : TANK_RELOAD;
 function tankFire(now) {
   if (!me.trigger || me.firedPress) return;
   me.firedPress = true;
+  if (ride.ctype === 'gustav') {   // Riesengranate: fliegt im hohen Bogen (wie eine Bombe), riesige Explosion
+    if (now - (ride.tankShot || -99) < GUSTAV_RELOAD) { sndClick(0.05, 2); return; }
+    ride.tankShot = now;
+    const m = vehicles[ride.v].mesh; m.root.updateMatrixWorld(true);
+    const tip = m.barrel.localToWorld(new THREE.Vector3(m.muzzleX, 0, 0)), dir = tip.clone().sub(m.barrel.localToWorld(new THREE.Vector3(0, 0, 0))).normalize();
+    fireRocket(tip, dir.clone().multiplyScalar(115), true, BOMB_W);
+    sndBoom(tip); setTimeout(() => sndBoom(tip), 70); me.shake = Math.max(me.shake, 1.4); ride.recoil = 1;
+    explosionFx(tip.clone());
+    for (let k = 0; k < 14; k++) puff(tip.clone(), 0xcfcfcf, rnd(1, 2), rnd(2, 3.5), dir.clone().multiplyScalar(rnd(3, 9)).add(new THREE.Vector3(rnd(-2, 2), rnd(0, 2), rnd(-2, 2))), { opacity: 0.6, grow: 5 });
+    return;
+  }
   if (now - (ride.tankShot || -9) < TANK_RELOAD) { sndClick(0.05, 2); return; }
   ride.tankShot = now;
   const ty = ride.yaw + (ride.turret || 0), pit = ride.barrelP || 0, cp = Math.cos(pit);
@@ -1856,7 +1921,7 @@ function updateVehicles(dt) {
     m.steer.rotation.y = st;
     if (isTank) {   // Turm drehen, Rohr heben, Rückstoß nach dem Schuss; danach wie ein Auto behandeln (kein Wheelie)
       m.turret.rotation.y = st; m.barrel.rotation.z = wh;
-      const rc = v.i === ride.v ? (ride.recoil || 0) : 0; m.barrel.position.x = 1.55 - rc * 0.5;
+      const rc = v.i === ride.v ? (ride.recoil || 0) : 0; m.barrel.position.x = (m.barrelX || 1.55) - rc * (m.gustav ? 2.2 : 0.5);
       if (v.i === ride.v) ride.recoil = Math.max(0, rc - dt * 2.5);
       wh = 0;
     }
