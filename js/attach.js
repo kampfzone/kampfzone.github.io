@@ -119,7 +119,8 @@ tryShoot = function (now) {
 /* --- Werkstatt-Fenster --- */
 (function () {
   const css = document.createElement('style');
-  css.textContent = `#attach .attTabs{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}
+  css.textContent = `#attach{position:fixed;inset:0;z-index:26;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6)} #attach.hidden{display:none}
+  #attach .attTabs{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}
   #attach .attTabs button{padding:6px 10px;font-size:13px} #attach .attTabs button.on{outline:2px solid #ffcc33}
   #attPrev{width:100%;height:190px;border-radius:10px;background:radial-gradient(#3a3f48,#14161b);display:block}
   #attach .attSlot{margin:10px 0 4px;font-weight:800;color:#ffcc33;font-size:14px}
