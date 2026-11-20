@@ -316,6 +316,24 @@ function makeTank() {
 }
 /* ---------- Schwerer Gustav: riesiges Eisenbahngeschütz auf zwei Gleisen (vorne = +x) ---------- */
 const GUSTAV_RAIL = { yaw: 0, z: 0, x0: 0, x1: 0 };
+const RAIL_NEW = { k: 0 };
+// Schienen legen: alle 1,5 m Fahrweg ein Stück Gleis in Fahrtrichtung (bei allen Spielern gleich, aus der Bewegung des Gustav)
+function layRail(v, x, y, z) {
+  const R = RAIL_NEW; if (!R.sl) return;
+  if (v.lrx === undefined) { v.lrx = x; v.lrz = z; return; }
+  const dx = x - v.lrx, dz = z - v.lrz, d = Math.hypot(dx, dz);
+  if (d > 30) { v.lrx = x; v.lrz = z; return; }   // Neustart / Sprung: nicht quer über die Karte legen
+  if (d < 1.5) return;
+  const mx = v.lrx + dx / 2, mz = v.lrz + dz / 2; v.lrx = x; v.lrz = z;
+  const r = R.rect; if (mx > r.x0 && mx < r.x1 && mz > r.z0 && mz < r.z1) return;   // altes Gleis liegt hier schon
+  const yaw = Math.atan2(-dz, dx), q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), s = new THREE.Vector3(1, 1, 1), m = new THREE.Matrix4();
+  const at = (ox, oy, oz) => new THREE.Vector3(ox, oy, oz).applyQuaternion(q).add(new THREE.Vector3(mx, y, mz));
+  const i = R.k % R.N; R.k++;
+  R.bd.setMatrixAt(i, m.compose(at(0, 0.06, 0), q, s)); R.sl.setMatrixAt(i, m.compose(at(0, 0.17, 0), q, s));
+  let j = 0; for (const sd of [-1, 1]) for (const zz of [-0.72, 0.72]) R.rl.setMatrixAt(i * 4 + j++, m.compose(at(0, 0.26, sd * 1.8 + zz), q, s));
+  R.bd.count = R.sl.count = Math.min(R.k, R.N); R.rl.count = R.bd.count * 4;
+  for (const im of [R.bd, R.sl, R.rl]) im.instanceMatrix.needsUpdate = true;
+}
 function makeGustav(v) {
   const T = TANK_MAT, root = new THREE.Group(); root.rotation.order = 'YXZ';
   const C = (r1, r2, len, mat, x, y, z, rx = 0, rz = Math.PI / 2, seg = 16) => ({ geo: new THREE.CylinderGeometry(r1, r2, len, seg), mat, p: [x, y, z], r: [rx, 0, rz] });
@@ -351,6 +369,13 @@ function makeGustav(v) {
   const mm = new THREE.Matrix4(); for (let k = 0; k < sl.count; k++) { mm.makeTranslation(-L / 2 + k * 1.2, 0.17, 0); sl.setMatrixAt(k, mm); }
   sl.receiveShadow = true; rails.add(sl);
   rails.updateMatrixWorld(true); rails.traverse(o => { o.matrixAutoUpdate = false; });   // fest: Gras wächst hier nicht durch
+  // neue Schienen (beim Fahren abseits des Gleises gelegt): Schwellen + Schienenstücke als InstancedMesh, Ringpuffer
+  const N = 3000;
+  RAIL_NEW.sl = new THREE.InstancedMesh(new THREE.BoxGeometry(0.25, 0.12, 6.4), sl.material, N);
+  RAIL_NEW.rl = new THREE.InstancedMesh(new THREE.BoxGeometry(1.6, 0.16, 0.12), T.steel, N * 4);
+  RAIL_NEW.bd = new THREE.InstancedMesh(new THREE.BoxGeometry(1.6, 0.12, 7.2), rp[rp.length - 1].mat, N);
+  for (const im of [RAIL_NEW.sl, RAIL_NEW.rl, RAIL_NEW.bd]) { im.count = 0; im.frustumCulled = false; im.receiveShadow = true; scene.add(im); }
+  RAIL_NEW.N = N; RAIL_NEW.rect = { x0: cx - L / 2, x1: cx + L / 2, z0: cz - 4, z1: cz + 4 };
   const dummy = new THREE.Group();
   return { root, spinners: [], fronts: [], turret, barrel, barrelX: 1.2, muzzleX: 27, gustav: true, steer: dummy, stand: dummy, wf: dummy, wr: dummy, tank: true };
 }
@@ -978,7 +1003,7 @@ function startRide(i) {
     applyLook(v, ride.ctype); ride.nitroT = 0; ride.nitroCd = 0;
     const ct = CAR_TYPES[ride.ctype];
     showMsg(TOUCH ? ct.name : `${ct.name}: ${ct.info}  ·  ${kbK('tune')} = Tuning`);   // Handy: kurz halten
-  } else if (v.kind === 'tank' && v.ctype === 'gustav') { ride.ctype = 'gustav'; ride.turret = 0; ride.barrelP = 0.35; showMsg(TOUCH ? 'SCHWERER GUSTAV!  Zielen = Rohr · FEUER = Riesengranate' : 'SCHWERER GUSTAV!  Maus = Rohr richten · Linksklick = Riesengranate (Bogenschuss) · W/S auf den Schienen fahren · E aussteigen'); }
+  } else if (v.kind === 'tank' && v.ctype === 'gustav') { ride.ctype = 'gustav'; ride.turret = 0; ride.barrelP = 0.35; showMsg(TOUCH ? 'SCHWERER GUSTAV!  Zielen = Rohr · FEUER = Riesengranate' : 'SCHWERER GUSTAV!  Maus = Rohr richten · Linksklick = Riesengranate (Bogenschuss) · W/S fahren · A/D lenken = neue Schienen legen · E aussteigen'); }
   else if (v.kind === 'tank') showMsg('PANZER!  Maus = Turm · Linksklick = Kanone · W/S fahren · A/D drehen · E aussteigen');
   else if (v.kind === 'plane' && v.ctype === 'jet') { ride.ctype = 'jet'; ride.thrl = 0; ride.pitch = 0; ride.planeV = 0; ride.q = null; ride.air = false; ride.camQ = null; ride.gunAmmo = JET_AMMO; ride.gunReload = 0; ride.msl = JET_MSL; ride.mslReload = 0; ride.lock = -1; ride.gunHits = {}; showMsg(TOUCH ? 'KAMPFJET!  ▲ Gas (voll = Nachbrenner) · ▲ZIEHEN ab ~170 km/h · FEUER = Kanone · ZOOM = Rakete' : `KAMPFJET!  ${kbK('forward')} Schub (Vollgas = Nachbrenner) · ab ~170 km/h ${kbK('jump')} = hochziehen · Linksklick Kanone · Rechtsklick Lenkrakete`); }
   else if (v.kind === 'plane') { ride.ctype = 'plane'; ride.thrl = 0; ride.pitch = 0; ride.planeV = 0; ride.bombs = PLANE_BOMBS; ride.bombReload = 0; ride.rkts = PLANE_RKTS; ride.rktReload = 0; ride.bombHeld = false; showMsg(TOUCH ? 'FLUGZEUG!  ▲ Gas · ▲ZIEHEN ab ~90 km/h = abheben · ◀ ▶ Kurven' : `FLUGZEUG!  ${kbK('forward')} Gas · ab ~90 km/h ${kbK('jump')} = hochziehen · ${kbK('crouch')} = Nase runter · ${kbK('left')}/${kbK('right')} Kurven`); }
@@ -1064,9 +1089,8 @@ function updateRide(dt) {
     ride.whT = 0;
   }
   if (isTank && ride.ctype === 'gustav') {   // Schwerer Gustav: fährt nur auf den Schienen, Rohr schwenkt wenig, steigt hoch
-    const G = GUSTAV_RAIL; ride.yaw = G.yaw; ride.lean = 0;
-    ride.pos.z = G.z; if (ride.pos.x < G.x0 || ride.pos.x > G.x1) { ride.pos.x = Math.max(G.x0, Math.min(G.x1, ride.pos.x)); ride.speed = 0; }
-    ride.speed = Math.max(-3, Math.min(3, ride.speed));
+    ride.speed = Math.max(-3, Math.min(3, ride.speed)); ride.lean = 0;
+    ride.yaw += steer * 0.3 * dt * Math.min(1, Math.abs(ride.speed) / 1.5) * Math.sign(ride.speed || 1);   // lenkt nur in der Fahrt (wie ein Zug in der Kurve), legt dabei neue Schienen
     ride.vel.x = Math.cos(ride.yaw) * ride.speed; ride.vel.z = -Math.sin(ride.yaw) * ride.speed;
     let d = (me.yaw + Math.PI / 2 - ride.yaw) - (ride.turret || 0); d = Math.atan2(Math.sin(d), Math.cos(d));
     ride.turret = Math.max(-0.45, Math.min(0.45, (ride.turret || 0) + Math.max(-0.35 * dt, Math.min(0.35 * dt, d))));
@@ -1934,6 +1958,7 @@ function updateVehicles(dt) {
       pitch = v.pitch;
     }
     if (isHeli) { pitch = v.i === ride.v ? (ride.pitch || 0) : (v.d ? v.wh || 0 : 0); wh = 0; }
+    if (v.ctype === 'gustav') layRail(v, x, y, z);
     v.rx = x; v.rz = z; v.ry = y;
     const fwd = Math.cos(yaw) * 1, dirSign = ((x - (m.root.position.x)) * Math.cos(yaw) - (z - m.root.position.z) * Math.sin(yaw)) >= 0 ? 1 : -1;
     v.spin += moved / (isTank ? TANK_WHEEL_R : isCar ? CAR_WHEEL_R : WHEEL_R) * dirSign;

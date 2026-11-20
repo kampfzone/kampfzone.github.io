@@ -95,7 +95,7 @@ function updateHUD(dt) {
     const nowS = performance.now() / 1000;
     if (ride.kind === 'tank') {
       const rl = Math.max(0, tankReload() - (nowS - (ride.tankShot || -99)));
-      if (ride.ctype === 'gustav') hudSet('rideHint', 'html', `💣 <b>Schwerer Gustav</b> · Maus = Rohr (höher = weiter) · <b>Linksklick</b> = Riesengranate ${rl > 0 ? `<span style="color:#ff9a3a">(lädt … ${rl.toFixed(1)} s)</span>` : '<span style="color:#7dff7a">(BEREIT)</span>'} · <b>${kbK('forward')}/${kbK('back')}</b> Schienen · <b>${kbK('ride')}</b> aussteigen`);
+      if (ride.ctype === 'gustav') hudSet('rideHint', 'html', `💣 <b>Schwerer Gustav</b> · Maus = Rohr (höher = weiter) · <b>Linksklick</b> = Riesengranate ${rl > 0 ? `<span style="color:#ff9a3a">(lädt … ${rl.toFixed(1)} s)</span>` : '<span style="color:#7dff7a">(BEREIT)</span>'} · <b>${kbK('forward')}/${kbK('back')}</b> fahren · <b>${kbK('left')}/${kbK('right')}</b> lenken = Schienen legen ·<b>${kbK('ride')}</b> aussteigen`);
       else hudSet('rideHint', 'html', `🛡️ <b>Panzer</b> · Maus = Turm · <b>Linksklick</b> = Kanone ${rl > 0 ? `<span style="color:#ff9a3a">(lädt … ${rl.toFixed(1)} s)</span>` : '<span style="color:#7dff7a">(BEREIT)</span>'} · <b>${kbK('forward')}/${kbK('back')}</b> fahren · <b>${kbK('left')}/${kbK('right')}</b> drehen · <b>${kbK('ride')}</b> aussteigen`);
     } else hudSet('rideHint', 'html', ride.kind === 'plane' ? (ride.ctype === 'jet' ? jetHint() : planeHint()) : heliHint());
     hudSet('rideHint', 'display', 'block'); hudSet('speedo', 'display', 'block');
