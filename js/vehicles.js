@@ -324,7 +324,7 @@ function layRail(v, x, y, z) {
   const dx = x - v.lrx, dz = z - v.lrz, d = Math.hypot(dx, dz);
   if (d > 30) { v.lrx = x; v.lrz = z; return; }   // Neustart / Sprung: nicht quer über die Karte legen
   if (d < 1.5) return;
-  const mx = v.lrx + dx / 2, mz = v.lrz + dz / 2; v.lrx = x; v.lrz = z;
+  const mx = v.lrx + dx / 2 + dx / d * 16, mz = v.lrz + dz / 2 + dz / d * 16; v.lrx = x; v.lrz = z;   // 16 m voraus: Gleis liegt schon, bevor er drüberfährt
   const r = R.rect; if (mx > r.x0 && mx < r.x1 && mz > r.z0 && mz < r.z1) return;   // altes Gleis liegt hier schon
   const yaw = Math.atan2(-dz, dx), q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), s = new THREE.Vector3(1, 1, 1), m = new THREE.Matrix4();
   const at = (ox, oy, oz) => new THREE.Vector3(ox, oy, oz).applyQuaternion(q).add(new THREE.Vector3(mx, y, mz));
@@ -1089,7 +1089,7 @@ function updateRide(dt) {
     ride.whT = 0;
   }
   if (isTank && ride.ctype === 'gustav') {   // Schwerer Gustav: fährt nur auf den Schienen, Rohr schwenkt wenig, steigt hoch
-    ride.speed = Math.max(-3, Math.min(3, ride.speed)); ride.lean = 0;
+    ride.speed = Math.max(-11, Math.min(11, ride.speed)); ride.lean = 0;
     ride.yaw += steer * 0.3 * dt * Math.min(1, Math.abs(ride.speed) / 1.5) * Math.sign(ride.speed || 1);   // lenkt nur in der Fahrt (wie ein Zug in der Kurve), legt dabei neue Schienen
     ride.vel.x = Math.cos(ride.yaw) * ride.speed; ride.vel.z = -Math.sin(ride.yaw) * ride.speed;
     let d = (me.yaw + Math.PI / 2 - ride.yaw) - (ride.turret || 0); d = Math.atan2(Math.sin(d), Math.cos(d));
