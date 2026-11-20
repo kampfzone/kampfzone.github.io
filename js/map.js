@@ -3168,6 +3168,7 @@ function weltFields() {
     let kind = 'hay';
     if (!nearRunway) { let t = fr() * 13; for (const [k, wgt] of KINDS) if ((t -= wgt) < 0) { kind = k; break; } }
     else fr();
+    if ((kind === 'wheat' || kind === 'corn' || kind === 'rape') && x < 1482 && x + w > 1328 && z < -320 && z + d > -334) kind = 'plow';   // Gleis des Schweren Gustav: keine hohen Pflanzen
     if (kind === 'wheat') stand(x, z, w, d, 0.95, M.wheat, M.wheatS);
     else if (kind === 'corn') stand(x, z, w, d, 2.3, M.corn, M.cornS);
     else if (kind === 'rape') stand(x, z, w, d, 1.35, M.rape, M.rapeS);
