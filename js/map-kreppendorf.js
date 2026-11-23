@@ -202,6 +202,9 @@ function buildKreppendorfMap() {
       const e = Math.min(L, s + seg), m = (s + e) / 2, x = ax + tx * m, z = az + tz * m, y = H(x, z), len = e - s;
       if (gapAt >= 0 && Math.abs(m - gapAt) < 0.9) continue;   // Gartentor / Einfahrt
       if (blocked(x, z)) continue;
+      { const sx0 = ax + tx * s, sz0 = az + tz * s, sx1 = ax + tx * e, sz1 = az + tz * e, ch = type === 4 ? 0.95 : 1.05;   // Kollision: nicht durchlaufen, aber drüberspringen/-klettern (1 m hoch)
+        if (Math.abs(tx) > 0.96 || Math.abs(tz) > 0.96) collider(x, y - 0.3, z, Math.abs(sx1 - sx0) + 0.25, ch + 0.3, Math.abs(sz1 - sz0) + 0.25);
+        else for (let q = s + 0.25; q < e; q += 0.5) { const qx = ax + tx * q, qz = az + tz * q; collider(qx, H(qx, qz) - 0.3, qz, 0.45, ch + 0.3, 0.45); } }
       if (type === 2) { box(GM.hedge, x, y - 0.1, z, len + 0.1, 1.35, 0.7, rot); continue; }
       const px = ax + tx * s, pz = az + tz * s, py = H(px, pz);
       if (type === 4) { box(GM.stone, x, y - 0.2, z, len, 0.6, 0.3, rot); box(GM.wood, px, py + 0.4, pz, 0.12, 0.75, 0.12, rot); box(GM.wood, x, y + 0.85, z, len, 0.08, 0.04, rot); continue; }
