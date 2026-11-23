@@ -16,8 +16,8 @@ if (PORTAL) {
   document.head.appendChild(st);
 }
 
-/* Update-Prüfung: beim Veröffentlichen wird 20261123-172825 durch eine Versionsnummer ersetzt */
-const BUILD = '20261123-172825';
+/* Update-Prüfung: beim Veröffentlichen wird 20261123-173553 durch eine Versionsnummer ersetzt */
+const BUILD = '20261123-173553';
 // Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
 // Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
 const UPD = { newer: null };
@@ -880,6 +880,7 @@ var WELT_ZS = window.WELT_ZS = 1320;   // Südrand der Karte Welt (z): bis z ~11
   const wiese = welt ? tintedTex('grass', 0x587a34) : null; if (wiese) wiese.repeat.set(FW / 5, FD / 5);
   const floor = new THREE.Mesh(withUv2(new THREE.PlaneGeometry(FW, FD)), welt ? pbr('grass', 2, { map: wiese }, FW / 5, FD / 5) : pbr('asphalt', 3, {}, FW / 3, FD / 3));
   floor.rotation.x = -Math.PI / 2; floor.position.x = hafen ? -3 : krep ? 0 : welt ? 680 : 0; if (welt && !krep) floor.position.z = (WELT_ZS - 440) / 2; floor.receiveShadow = true;
+  if (krep) floor.position.y = -80;   // Kreppendorf: Boden folgt dem Gelände (Netz in map-kreppendorf.js)
   scene.add(floor); mapMeshes.push(floor);
   // Hügel per Rauschfunktion
   const hash = (x, z) => { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); };
@@ -909,6 +910,7 @@ var WELT_ZS = window.WELT_ZS = 1320;   // Südrand der Karte Welt (z): bis z ~11
     let hills = sstep(68, welt ? 140 : 200, edge) * (fbm(x * 0.008 + 3, z * 0.008) * 70 + 4) + (welt ? 0 : sstep(63, 85, edge) * fbm(x * 0.06, z * 0.06) * 2);
     if (welt && !krep) hills *= sstep(8, 30, Math.abs(x)) * sstep(8, 30, Math.abs(z));
     const sea = welt ? 0 : hafen ? sstep(54, 62, x) : sstep(101, 108, x);
+    if (krep) return window.krepH(x, z) - 0.4 + hills;   // Kreppendorf: echte Geländehöhen (genaues Netz kommt aus map-kreppendorf.js)
     return hills * (1 - sea) - 6 * sea - 0.06;
   };
   const geo = welt && !krep ? new THREE.PlaneGeometry(2350, 1000 + (WELT_ZS - 440), 470, 200 + Math.round((WELT_ZS - 440) / 5)) : new THREE.PlaneGeometry(1000, 1000, 120, 120); geo.rotateX(-Math.PI / 2); if (welt && !krep) geo.translate(675, 0, (WELT_ZS - 440) / 2);   // Welt: x -500 … 1850, z -500 … WELT_ZS + 60
