@@ -40,23 +40,44 @@ function buildKreppendorfMap() {
     g.computeVertexNormals(); withUv2(g); const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true; scene.add(m); mapMeshes.push(m); return m;
   };
 
-  /* --- Boden: echtes Luftbild (DOP20 Bayern) auf dem DGM1-Gelände → Gärten, Felder, Wege, Höfe wie in echt --- */
-  { const R0 = 264, C = 2, n = R0 * 2 / C, pos = [], uv = [], idx = [];
-    for (let i = 0; i <= n; i++) for (let j = 0; j <= n; j++) { const x = -R0 + j * C, z = -R0 + i * C; pos.push(x, H(x, z) + 0.03, z); uv.push(j / n, 1 - i / n); }
+  /* --- Boden: echtes Gras (mit Halmen aus grass.js) auf dem DGM1-Gelände, eingefärbt mit den Farben aus dem Luftbild (Felder, Gärten, Höfe) */
+  { const R0 = 264, C = 2, n = R0 * 2 / C, pos = [], uv = [], col = [], idx = [], G = D.gc, raw = atob(G.b), tmp = new THREE.Color();
+    for (let i = 0; i <= n; i++) for (let j = 0; j <= n; j++) {
+      const x = -R0 + j * C, z = -R0 + i * C, k = (i * G.n + j) * 3; pos.push(x, H(x, z) + 0.03, z); uv.push(x / 3, z / 3);
+      tmp.setRGB(raw.charCodeAt(k) / 255, raw.charCodeAt(k + 1) / 255, raw.charCodeAt(k + 2) / 255).convertSRGBToLinear();
+      const hsl = {}; tmp.getHSL(hsl); if ((hsl.h < 0.07 || hsl.h > 0.85) && hsl.s > 0.08) { hsl.h = 0.25; hsl.s = 0.45; hsl.l = 0.12; }   // Dächer im Luftbild (rötlich) → Gartenrasen
+      tmp.setHSL(hsl.h, Math.min(1, hsl.s * 1.25), Math.min(0.2, hsl.l * 0.6)); col.push(tmp.r * 2.2, tmp.g * 2.2, tmp.b * 2.2);   // durch Grastextur geteilt → echte Farbe
+    }
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const a = i * (n + 1) + j, b = a + n + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
-    const tex = new THREE.TextureLoader().load('textures/kreppendorf-dop.jpg'); tex.encoding = THREE.sRGBEncoding; tex.anisotropy = MAX_ANISO;
-    const m = new THREE.Mesh(withUv2(g), new THREE.MeshStandardMaterial({ map: tex, roughness: 1, metalness: 0, color: new THREE.Color(0.42, 0.42, 0.42) })); m.receiveShadow = true; scene.add(m); mapMeshes.push(m); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
+    const m = new THREE.Mesh(withUv2(g), pbr('grass', 3, { map: tintedTex('grass', 0x9a9a9a), mat: { vertexColors: true } })); m.receiveShadow = true; scene.add(m); mapMeshes.push(m); }
 
-  /* --- Straßen aus OSM: nur für Fahrphysik und Radar (zu sehen sind sie im Luftbild) --- */
+  /* --- Straßen und Wege aus OSM als echte Asphalt-/Schotterbänder (folgen dem Gelände) --- */
+  const MR = { road: pbr('asphalt', 3, { mat: { polygonOffset: true, polygonOffsetFactor: -3 } }),
+    dirt: pbr('asphalt', 3, { map: tintedTex('asphalt', 0x7a6248), mat: { color: new THREE.Color(0.7, 0.64, 0.56), polygonOffset: true, polygonOffsetFactor: -3 }, normalScale: 1.6 }) };
   const W = { primary: 7.5, secondary: 7, tertiary: 6.5, residential: 5.5, unclassified: 5, living_street: 4.5, service: 3.5, track: 3, path: 1.8, footway: 1.8, cycleway: 3 };
   const streets = window.MAP_STREETS = [], roadPts = [];
+  const band = (pts, w, y, mat, keep) => {
+    const P = [], U = [];
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const [ax, az] = pts[i], [bx, bz] = pts[i + 1], L = Math.hypot(bx - ax, bz - az); if (L < 0.01) continue;
+      const nx = -(bz - az) / L * w / 2, nz = (bx - ax) / L * w / 2, ex = (bx - ax) / L * w * 0.25, ez = (bz - az) / L * w * 0.25;
+      const A = [ax - ex + nx, az - ez + nz], B = [ax - ex - nx, az - ez - nz], C = [bx + ex - nx, bz + ez - nz], Dd = [bx + ex + nx, bz + ez + nz];
+      const n = Math.max(1, Math.ceil(L / 2)), Lx = L + w * 0.5, at = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+      for (let k = 0; k < n; k++) {
+        const a = at(A, Dd, k / n), b = at(B, C, k / n), c = at(B, C, (k + 1) / n), d = at(A, Dd, (k + 1) / n), ua = Lx * k / n / 3, ub = Lx * (k + 1) / n / 3;
+        for (const [q, u, v] of [[a, ua, 0], [c, ub, w / 3], [b, ua, w / 3], [a, ua, 0], [d, ub, 0], [c, ub, w / 3]]) { P.push(q[0], H(q[0], q[1]) + y + 0.03, q[1]); U.push(v, u); }
+      }
+      if (keep) for (let s = 0; s <= L; s += 5) { const x = ax + (bx - ax) * s / L, z = az + (bz - az) * s / L, r = w / 2 + 0.5; streets.push([x - r, z - r, x + r, z + r]); }
+    }
+    if (P.length) { const m = mesh(P, U, mat); m.castShadow = false; }
+  };
   for (const w of D.ways) {
     if (!w.k.startsWith('h:')) continue;
-    const pts = P2(w.p), t = w.k.slice(2), wd = W[t]; if (!wd || !(wd >= 3.5 || t === 'cycleway')) continue;
-    for (let i = 0; i + 1 < pts.length; i++) { const [ax, az] = pts[i], [bx, bz] = pts[i + 1], L = Math.hypot(bx - ax, bz - az), r = wd / 2 + 0.5;
-      for (let s = 0; s <= L; s += 5) { const x = ax + (bx - ax) * s / L, z = az + (bz - az) * s / L; streets.push([x - r, z - r, x + r, z + r]); } }
-    if (t !== 'service') roadPts.push(pts);
+    const pts = P2(w.p), t = w.k.slice(2), wd = W[t]; if (!wd) continue;
+    const paved = wd >= 3.5 || t === 'cycleway';
+    band(pts, wd, paved ? 0.06 : 0.055, paved ? MR.road : MR.dirt, paved);
+    if (paved && t !== 'service') roadPts.push(pts);
   }
   window.krepOnRoad = (x, z) => { for (const [x0, z0, x1, z1] of streets) if (x > x0 && x < x1 && z > z0 && z < z1) return true; return false; };
   const roadDist = (x, z) => { let d = 1e9; for (const pts of roadPts) for (let i = 0; i + 1 < pts.length; i++) { const [ax, az] = pts[i], [bx, bz] = pts[i + 1], dx = bx - ax, dz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1))); d = Math.min(d, Math.hypot(ax + dx * t - x, az + dz * t - z)); } return d; };
