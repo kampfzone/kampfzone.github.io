@@ -829,7 +829,7 @@ const vehicles = MAP_VEHICLES.map((v, i) => {
     : ctype === 'race' ? makeCar(RACE_PAINTS[i % 4], SILVER_RIM, 'race')
     : ctype === 'muscle' ? makeCar(MUSCLE_PAINTS[i % 4], CAR_BLACK, 'muscle')
     : makeCar(CAR_PAINTS[(i + 5) % CAR_PAINTS.length], CAR_RIMS[(i + 5) % CAR_RIMS.length], 'drift');
-  return { i, kind, ctype, x: v.x, y: 0, z: v.z, yaw: v.yaw, lean: 0, d: 0, mesh: m, spin: 0, rx: v.x, rz: v.z, ry: 0 };
+  return { i, kind, ctype, x: v.x, y: v.y || 0, z: v.z, yaw: v.yaw, lean: 0, d: 0, mesh: m, spin: 0, rx: v.x, rz: v.z, ry: 0 };
 });
 // Echtes 3D-Modell (Ferrari aus den three.js-Beispielen, wie in Drift-Welt) – ersetzt die einfachen Autos, sobald es geladen ist
 (function loadFerrari() {

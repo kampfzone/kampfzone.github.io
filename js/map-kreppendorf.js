@@ -269,22 +269,41 @@ function buildKreppendorfMap() {
   }
   const townSign = (x, z, rot) => lift(x, z, () => { addBox(x, 0, z, 0.12, 2.2, 0.12, MAT.metal, 1, { round: 0.05 }); tkSign(x, 2.3, z, 2.8, 0.9, rot, tkSignMat('KREPPENDORF', '#f2d21b', '#111111', false)); });
 
-  /* --- Autos am Straßenrand, Mopeds, Ortsschilder --- */
-  let nCar = 0, nSign = 0;
-  for (const pts of roadPts) for (let i = 1; i + 1 < pts.length && nCar < 10; i += 3) {
-    const [ax, az] = pts[i], [bx, bz] = pts[i + 1], L = Math.hypot(bx - ax, bz - az); if (L < 8) continue;
-    const mx = (ax + bx) / 2 + -(bz - az) / L * 4, mz = (az + bz) / 2 + (bx - ax) / L * 4;
-    if (!freeAt(mx, mz, 3) || Math.hypot(mx, mz) > 200 || srand() < 0.4) continue;
-    carSpot(mx, mz, Math.atan2(bz - az, bx - ax) + (srand() < 0.5 ? Math.PI : 0)); nCar++;
+  /* --- Fahrzeuge wie auf den anderen Karten: Autos am Straßenrand, Mopeds, 2 Panzer, 2 Helis auf Landeplätzen --- */
+  const hcs = homes.map(hm => [hm.f.mid.x, hm.f.mid.z]);
+  const nearHome = (x, z, r) => hcs.some(([a, b]) => Math.hypot(a - x, b - z) < r);
+  const treeNear = (x, z, r) => TREE_BOXES.some(b => x > b.min.x - r && x < b.max.x + r && z > b.min.z - r && z < b.max.z + r);
+  const vspot = (x, z, yaw, kind, ctype) => MAP_VEHICLES.push({ x, z, y: H(x, z) + 0.3, yaw, kind, ctype });
+  let nCar = 0, nSign = 0, nTank = 0;
+  for (const pts of roadPts) for (let i = 1; i + 1 < pts.length; i += 2) {
+    const [ax, az] = pts[i], [bx, bz] = pts[i + 1], L = Math.hypot(bx - ax, bz - az); if (L < 7) continue;
+    const yaw = Math.atan2(bz - az, bx - ax), mx = (ax + bx) / 2 + -(bz - az) / L * 3.6, mz = (az + bz) / 2 + (bx - ax) / L * 3.6;
+    if (!freeAt(mx, mz, 3) || srand() < 0.35) continue;
+    if (nTank < 2 && !nearHome(mx, mz, 25) && Math.hypot(mx, mz) > 90) { vspot((ax + bx) / 2, (az + bz) / 2, -yaw, 'tank'); nTank++; continue; }   // Panzer am Ortsrand
+    if (nCar < 14 && nearHome(mx, mz, 30)) { vspot(mx, mz, -yaw + (srand() < 0.5 ? Math.PI : 0), 'car'); nCar++; }
     if (nSign < 2 && Math.hypot(mx, mz) > 120) { townSign(mx, mz + 2, srand() * 6); nSign++; }
   }
-  for (let i = 0; i < 40 && MAP_VEHICLES.length < nCar + 4; i++) { const x = srnd(-150, 150), z = srnd(-150, 150); if (onRoad(x, z) && freeAt(x, z, 2)) car(x, z, srand() < 0.5); }
+  for (let i = 0, nm = 0; i < 400 && nm < 8; i++) { const [x, z] = hcs[i % hcs.length]; const px = x + srnd(-12, 12), pz = z + srnd(-12, 12); if (onRoad(px, pz) && freeAt(px, pz, 2)) { vspot(px, pz, srand() * 6.28); nm++; } }   // Mopeds im Dorf
+  { const pad = new THREE.MeshStandardMaterial({ color: 0x5d6168, roughness: 0.85 }), ring = new THREE.MeshStandardMaterial({ color: 0xf2d21b, roughness: 0.8 });
+    for (let i = 0, nh = 0; i < 3000 && nh < 2; i++) {   // Heli-Landeplätze auf freien, flachen Wiesen nahe am Dorf
+      const x = srnd(-220, 220), z = srnd(-220, 220);
+      if (!freeAt(x, z, 8) || onRoad(x, z) || treeNear(x, z, 10) || !nearHome(x, z, 80) || nearHome(x, z, 25) || Math.abs(H(x + 6, z) - H(x - 6, z)) + Math.abs(H(x, z + 6) - H(x, z - 6)) > 1.2) continue;
+      if (MAP_VEHICLES.some(v => v.kind === 'heli' && Math.hypot(v.x - x, v.z - z) < 80)) continue;
+      cyl(pad, x, H(x, z) - 0.3, z, 7, 7, 0.4, 24); cyl(ring, x, H(x, z) - 0.28, z, 6.2, 6.2, 0.4, 24); cyl(pad, x, H(x, z) - 0.26, z, 5.6, 5.6, 0.4, 24);
+      for (const [dx, w, d] of [[-1.6, 0.7, 4.4], [1.6, 0.7, 4.4], [0, 3.9, 0.7]]) box(GM.woodW, x + dx, H(x, z) + 0.12, z, w, 0.04, d, 0);   // „H“
+      vspot(x, z, Math.PI / 2, 'heli'); nh++;
+    }
+  }
 
-  /* --- Spawnpunkte (über den ganzen Ort verteilt) + Waffen --- */
+  /* --- Spawnpunkte: immer im Dorf (auf Straßen/Wegen nah an den Häusern) + Waffen --- */
   const sp = window.KREPP_SPAWNS = [];
-  for (let i = 0; i < 4000 && sp.length < 32; i++) {
-    const x = Math.round(srnd(-S + 12, S - 12)), z = Math.round(srnd(-S + 12, S - 12));
-    if (freeAt(x, z, 3) && !TREE_BOXES.some(b => x > b.min.x - 1.5 && x < b.max.x + 1.5 && z > b.min.z - 1.5 && z < b.max.z + 1.5) && sp.every(([a, b]) => Math.hypot(a - x, b - z) > 40)) sp.push([x, z]);
+  const med = a => a.slice().sort((p, q) => p - q)[a.length >> 1], VX = med(hcs.map(p => p[0])), VZ = med(hcs.map(p => p[1]));   // Dorfmitte
+  for (const sep of [22, 14, 8]) for (const pts of roadPts) for (let i = 0; i + 1 < pts.length && sp.length < 32; i++) {
+    const [ax, az] = pts[i], [bx, bz] = pts[i + 1], L = Math.hypot(bx - ax, bz - az);
+    for (let s = 0; s < L && sp.length < 32; s += 4) {
+      const x = Math.round(ax + (bx - ax) * s / L), z = Math.round(az + (bz - az) * s / L);
+      if (Math.hypot(x - VX, z - VZ) < 140 && nearHome(x, z, 28) && freeAt(x, z, 2) && !treeNear(x, z, 1.5) && sp.every(([a, b]) => Math.hypot(a - x, b - z) > sep)) sp.push([x, z]);
+    }
   }
   sp.forEach(([x, z], i) => { if (i % 2 === 0) MAP_PICKUPS.push({ w: i % 3, x: x + 3, y: H(x + 3, z), z }); });
   window.FIRE_POS = [9999, 9999]; window.SHIP_SMOKE = [9999, 16, 9999];
