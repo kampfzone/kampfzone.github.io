@@ -59,7 +59,7 @@ function buildKreppendorfMap() {
   }
 
   /* --- Straßen, Wege und die Zenn als Bänder --- */
-  const W = { primary: 7.5, secondary: 7, tertiary: 6.5, residential: 5.5, unclassified: 5, living_street: 4.5, service: 3.5, track: 3, path: 1.8, footway: 1.8, cycleway: 2.2 };
+  const W = { primary: 7.5, secondary: 7, tertiary: 6.5, residential: 5.5, unclassified: 5, living_street: 4.5, service: 3.5, track: 3, path: 1.8, footway: 1.8, cycleway: 3 };
   const streets = window.MAP_STREETS = [];
   const band = (pts, w, y, mat, keep) => {
     const P = [], U = [];
@@ -83,7 +83,7 @@ function buildKreppendorfMap() {
     if (w.k.startsWith('w:')) { band(pts, w.k === 'w:river' ? 7 : 3.5, 0.05, M.water, false); continue; }
     if (!w.k.startsWith('h:')) continue;
     const t = w.k.slice(2), wd = W[t]; if (!wd) continue;
-    const paved = wd >= 3.5;
+    const paved = wd >= 3.5 || t === 'cycleway';
     band(pts, wd, paved ? 0.06 : 0.055, paved ? M.road : M.dirt, paved);
     if (paved && t !== 'service') roadPts.push(pts);
   }
