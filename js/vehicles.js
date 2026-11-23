@@ -1670,6 +1670,7 @@ function tankFire(now) {
 /* ---------- Auto-Fahrphysik aus „Drift-Welt“: Längs- und Quergeschwindigkeit, Reifenhaftung, Handbremse ----------
    Gas im Drift hält das Heck draußen, Handbremse (Leertaste / Sprung-Taste) bricht das Heck aus, abseits der Straße bremst Gras. */
 function carOnRoad(x, z) {
+  if (MAP_ID === 'kreppendorf') return window.krepOnRoad(x, z);
   if (MAP_ID !== 'welt') return true;   // Tokio/Hafen: überall Asphalt
   if (x > 28 && x < 292 && z > -292 && z < -28) return true;   // Großstadt
   if (x > 8 && x < 46 && z > 8 && z < 46) return true;          // Tankstelle

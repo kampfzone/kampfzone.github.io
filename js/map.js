@@ -3955,7 +3955,8 @@ if (MAP_ID === 'hafen') {
     ...[-40, -110, -180, -250].map(x => [x - 4, 30, x + 4, 290]), ...[40, 110, 180, 250].map(z => [-290, z - 4, -30, z + 4])];
   window.FIRE_POS = [9999, 9999]; window.SHIP_SMOKE = [9999, 16, 9999];
   buildWeltMap();
-} else buildTokyoMap();
+} else if (MAP_ID === 'kreppendorf') buildKreppendorfMap();
+ else buildTokyoMap();
 
 /* Alle festen Karten-Objekte pro Material zu einem Objekt zusammenfassen (viel weniger Zeichenaufrufe) */
 // Auf der großen Karte „Welt“ in 70-m-Stücken zusammenfassen: dann zeichnet die Grafikkarte nur, was im Blick und nah genug ist
@@ -4178,7 +4179,7 @@ const SPAWNS_HAFEN = [[-34, -40], [-55, -30], [-20, -36], [-52, -11], [-36, 18],
 const SPAWNS_WELT = [[0, -20], [0, 20], [-20, 0], [20, 0], [70, -35], [130, -45], [190, -100], [250, -160], [160, -220], [100, -260], [280, -60], [45, -150],
   [-75, 40], [-40, 75], [-110, 150], [-180, 110], [-250, 200], [-140, 250], [-60, 250], [150, 40], [150, 120], [200, 150], [260, 150], [150, 250], [100, 100],
   [-150, -40], [-150, -120], [-150, -250], [-60, -150], [-250, -150], [-171, -65]];
-const SPAWNS = MAP_ID === 'hafen' ? SPAWNS_HAFEN : MAP_ID === 'welt' ? SPAWNS_WELT : SPAWNS_TOKIO;
+const SPAWNS = MAP_ID === 'kreppendorf' ? window.KREPP_SPAWNS : MAP_ID === 'hafen' ? SPAWNS_HAFEN : MAP_ID === 'welt' ? SPAWNS_WELT : SPAWNS_TOKIO;
 
 /* ======================= Kollision (mit Raster für schnelle Suche) ======================= */
 const GRID = 8, grid = new Map();

@@ -16,8 +16,8 @@ if (PORTAL) {
   document.head.appendChild(st);
 }
 
-/* Update-Prüfung: beim Veröffentlichen wird 20261120-205410 durch eine Versionsnummer ersetzt */
-const BUILD = '20261120-205410';
+/* Update-Prüfung: beim Veröffentlichen wird 20261123-172825 durch eine Versionsnummer ersetzt */
+const BUILD = '20261123-172825';
 // Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
 // Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
 const UPD = { newer: null };
@@ -55,7 +55,7 @@ document.getElementById('btnUpdate').onclick = () => freshReload(UPD.newer);
 const MAP_ID = (() => {
   let m = 'tokio';
   try { m = new URLSearchParams(location.search).get('map') || localStorage.getItem('kz_map') || 'tokio'; } catch (e) {}
-  return m === 'hafen' || m === 'welt' ? m : 'tokio';
+  return m === 'hafen' || m === 'welt' || m === 'kreppendorf' ? m : 'tokio';
 })();
 // Karte wechseln (im Menü) bzw. auf die Karte des Hosts umschalten: Seite mit ?map=… neu laden
 function switchMap(id, joinCode) {
@@ -476,7 +476,7 @@ function genStepBuffers() {
 // Untergrund an einer Stelle: Gras auf den Wiesen/Hügeln der Karte „Welt“, Holz/Metall auf erhöhten Böden, sonst Asphalt/Beton
 function stepSurface(x, y, z) {
   if (y > 0.35) { const gh = typeof hillH === 'function' ? hillH(x, z) : 0; if (y - gh > 0.35) return y > 3 ? 'metal' : 'wood'; }
-  if (MAP_ID === 'welt' && typeof carOnRoad === 'function' && !carOnRoad(x, z)) return 'grass';
+  if ((MAP_ID === 'welt' || MAP_ID === 'kreppendorf') && typeof carOnRoad === 'function' && !carOnRoad(x, z)) return 'grass';
   return 'hard';
 }
 let stepSide = 1;
@@ -874,12 +874,12 @@ function roundedBoxGeo(w, h, d, r, m = 2, tile = 0) {
 var WELT_ZS = window.WELT_ZS = 1320;   // Südrand der Karte Welt (z): bis z ~1190 flach (Südstadt mit Autohaus, Wohngebiet, Gewerbe), dahinter Berge
 (function ground() {
   // Asphalt über die ganze Spielfläche (Tokio: x/z -101 … 101; Hafenviertel: x -62 … 56, z -62 … 62)
-  const hafen = MAP_ID === 'hafen', welt = MAP_ID === 'welt', FW = hafen ? 118 : welt ? 2140 : 203, FD = hafen ? 124 : welt ? 780 + (WELT_ZS - 440) : 203;   // Welt: x -390 … 1750 (Osten: F1-Strecke + Flughafen, dahinter Militärflugplatz)
+  const hafen = MAP_ID === 'hafen', krep = MAP_ID === 'kreppendorf', welt = MAP_ID === 'welt' || krep, FW = hafen ? 118 : krep ? 560 : welt ? 2140 : 203, FD = hafen ? 124 : krep ? 560 : welt ? 780 + (WELT_ZS - 440) : 203;   // Kreppendorf: x/z -280 … 280, Wiese wie Welt   // Welt: x -390 … 1750 (Osten: F1-Strecke + Flughafen, dahinter Militärflugplatz)
   // Welt: Wiese als Boden (Straßen kommen als Asphaltstreifen darauf), sonst Asphalt
   // Welt: saftig grüne Wiese (eingefärbtes Gras-Foto, 5-m-Kacheln)
   const wiese = welt ? tintedTex('grass', 0x587a34) : null; if (wiese) wiese.repeat.set(FW / 5, FD / 5);
   const floor = new THREE.Mesh(withUv2(new THREE.PlaneGeometry(FW, FD)), welt ? pbr('grass', 2, { map: wiese }, FW / 5, FD / 5) : pbr('asphalt', 3, {}, FW / 3, FD / 3));
-  floor.rotation.x = -Math.PI / 2; floor.position.x = hafen ? -3 : welt ? 680 : 0; if (welt) floor.position.z = (WELT_ZS - 440) / 2; floor.receiveShadow = true;
+  floor.rotation.x = -Math.PI / 2; floor.position.x = hafen ? -3 : krep ? 0 : welt ? 680 : 0; if (welt && !krep) floor.position.z = (WELT_ZS - 440) / 2; floor.receiveShadow = true;
   scene.add(floor); mapMeshes.push(floor);
   // Hügel per Rauschfunktion
   const hash = (x, z) => { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); };
@@ -894,6 +894,7 @@ var WELT_ZS = window.WELT_ZS = 1320;   // Südrand der Karte Welt (z): bis z ~11
   // Hügel rund um die (quadratische) Karte, im Osten Hafenbecken
   // Abstand zum Rand: Stadt + Skyline reichen bis ~225 m, erst dahinter beginnen die Hügel
   const mapEdge = hafen ? (x, z) => Math.max(Math.abs(x + 3), z > 0 ? Math.max(0, z - 70) : -z)
+    : krep ? (x, z) => Math.max(Math.abs(x), Math.abs(z)) - 200
     : welt ? (x, z) => {   // Osten: durchgehend flach bis x 1040 (Ringstadt, F1-Ring, Flughafen), dann Bergrücken (Windräder),
       // dahinter flaches Tal (x 1160 … 1690, Militärflugplatz), ganz außen Berge; Süden: flach bis z ~1190 (Südstadt), östlich davon steigt der Bergrücken weiter an
       const zE = z < 0 ? -z - 312 : Math.min(z - 312, Math.max(z - (WELT_ZS - 128), x - 972));
@@ -906,11 +907,11 @@ var WELT_ZS = window.WELT_ZS = 1320;   // Südrand der Karte Welt (z): bis z ~11
   const heightAt = (x, z) => {
     const edge = mapEdge(x, z);
     let hills = sstep(68, welt ? 140 : 200, edge) * (fbm(x * 0.008 + 3, z * 0.008) * 70 + 4) + (welt ? 0 : sstep(63, 85, edge) * fbm(x * 0.06, z * 0.06) * 2);
-    if (welt) hills *= sstep(8, 30, Math.abs(x)) * sstep(8, 30, Math.abs(z));
+    if (welt && !krep) hills *= sstep(8, 30, Math.abs(x)) * sstep(8, 30, Math.abs(z));
     const sea = welt ? 0 : hafen ? sstep(54, 62, x) : sstep(101, 108, x);
     return hills * (1 - sea) - 6 * sea - 0.06;
   };
-  const geo = welt ? new THREE.PlaneGeometry(2350, 1000 + (WELT_ZS - 440), 470, 200 + Math.round((WELT_ZS - 440) / 5)) : new THREE.PlaneGeometry(1000, 1000, 120, 120); geo.rotateX(-Math.PI / 2); if (welt) geo.translate(675, 0, (WELT_ZS - 440) / 2);   // Welt: x -500 … 1850, z -500 … WELT_ZS + 60
+  const geo = welt && !krep ? new THREE.PlaneGeometry(2350, 1000 + (WELT_ZS - 440), 470, 200 + Math.round((WELT_ZS - 440) / 5)) : new THREE.PlaneGeometry(1000, 1000, 120, 120); geo.rotateX(-Math.PI / 2); if (welt && !krep) geo.translate(675, 0, (WELT_ZS - 440) / 2);   // Welt: x -500 … 1850, z -500 … WELT_ZS + 60
   const pos = geo.attributes.position;
   // Welt: wo das Gelände flach ist, liegt es deutlich unter der Wiese (y 0) – sonst flimmern beide aus der Ferne streifig ineinander
   for (let i = 0; i < pos.count; i++) { const h = heightAt(pos.getX(i), pos.getZ(i)); pos.setY(i, welt && h < 0.05 ? -0.6 : h); }
