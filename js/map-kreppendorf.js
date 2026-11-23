@@ -6,10 +6,10 @@ function buildKreppendorfMap() {
   const P2 = a => { const o = []; for (let i = 0; i < a.length; i += 2) o.push([a[i], a[i + 1]]); return o; };
   const inPoly = (x, z, pts) => { let c = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const [xi, zi] = pts[i], [xj, zj] = pts[j]; if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) c = !c; } return c; };
   const inside = (x, z, m = 0) => Math.abs(x) < S - 4 - m && Math.abs(z) < S - 4 - m;
-  /* --- Gelände: echte Höhen (EU-DEM), begehbar über das Hügel-System aus map.js --- */
+  /* --- Gelände: echte Höhen (DGM1 Bayern, 2-m-Raster), begehbar über das Hügel-System aus map.js --- */
   const H = window.krepH;
   addHillRegion({ x0: -S - 2, x1: S + 2, z0: -S - 2, z1: S + 2, fn: H });
-  hillMeshRect(-S - 2, S + 2, -S - 2, S + 2, pbr('grass', 2, { map: tintedTex('grass', 0x587a34) }), 5, 4);
+  hillMeshRect(-S - 2, S + 2, -S - 2, S + 2, pbr('grass', 2, { map: tintedTex('grass', 0x587a34) }), 5, 2);
   // Bauteil(e) aus map.js aufs Gelände heben: alles, was fn() neu in die Szene / Kollision legt, um H(x, z) nach oben
   const lift = (x, z, fn) => {
     const nc = scene.children.length, nb = boxes.length; fn(); const y = H(x, z);
@@ -36,7 +36,7 @@ function buildKreppendorfMap() {
   const flatPoly = (pts, y, mat, tile) => {   // Fläche (Feld, Wald, Wasser …) in 4-m-Zellen, folgt dem Gelände
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     for (const [x, z] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
-    const C = 4, P = [], U = [], v = (x, z) => { P.push(x, H(x, z) + y + 0.03, z); U.push(x / tile, z / tile); };
+    const C = 2, P = [], U = [], v = (x, z) => { P.push(x, H(x, z) + y + 0.03, z); U.push(x / tile, z / tile); };
     for (let x = Math.floor(Math.max(x0, -S) / C) * C; x < Math.min(x1, S); x += C) for (let z = Math.floor(Math.max(z0, -S) / C) * C; z < Math.min(z1, S); z += C) {
       if (!inPoly(x + C / 2, z + C / 2, pts)) continue;
       v(x, z); v(x, z + C); v(x + C, z); v(x + C, z); v(x, z + C); v(x + C, z + C);
@@ -67,7 +67,7 @@ function buildKreppendorfMap() {
       const [ax, az] = pts[i], [bx, bz] = pts[i + 1], L = Math.hypot(bx - ax, bz - az); if (L < 0.01) continue;
       const nx = -(bz - az) / L * w / 2, nz = (bx - ax) / L * w / 2, ex = (bx - ax) / L * w * 0.25, ez = (bz - az) / L * w * 0.25;   // etwas länger: keine Lücken in Kurven
       const A = [ax - ex + nx, az - ez + nz], B = [ax - ex - nx, az - ez - nz], C = [bx + ex - nx, bz + ez - nz], Dd = [bx + ex + nx, bz + ez + nz];
-      const n = Math.max(1, Math.ceil(L / 3)), Lx = L + w * 0.5;   // in ~3-m-Stücke teilen, damit das Band dem Gelände folgt
+      const n = Math.max(1, Math.ceil(L / 2)), Lx = L + w * 0.5;   // in ~3-m-Stücke teilen, damit das Band dem Gelände folgt
       const at = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
       for (let k = 0; k < n; k++) {
         const a = at(A, Dd, k / n), b = at(B, C, k / n), c = at(B, C, (k + 1) / n), d = at(A, Dd, (k + 1) / n), ua = Lx * k / n / 3, ub = Lx * (k + 1) / n / 3;
@@ -94,8 +94,7 @@ function buildKreppendorfMap() {
   D.houses.forEach((h, hi) => {
     const hash = Math.imul(hi + 17, 2654435761) >>> 0, roofM = M.roofs[hash % 7], wallM = M.walls[(hash >>> 8) % 8];
     // Haus auf das Gelände setzen: tiefster Geländepunkt unter dem Grundriss (hangseitig steckt es etwas im Boden)
-    let base = Infinity;
-    for (const f of (h.g.length ? h.g : h.r)) for (let i = 0; i < f.length; i += 3) base = Math.min(base, H(f[i], f[i + 1]));
+    const base = h.b;   // echte Bodenhöhe aus LoD2 (gleiche Bezugshöhe wie das DGM1-Gelände)
     let top = 0;
     for (const [list, isRoof] of [[h.r, true], [h.w, false]]) {
       const P = [], U = [];
@@ -179,7 +178,7 @@ function buildKreppendorfMap() {
 
   /* --- Quellenhinweis (Pflicht für LoD2 Bayern CC BY 4.0 und OSM ODbL) --- */
   const at = document.createElement('div');
-  at.textContent = 'Kartendaten: © Bayerische Vermessungsverwaltung (LoD2, CC BY 4.0) · © OpenStreetMap-Mitwirkende (ODbL)';
+  at.textContent = 'Kartendaten: © Bayerische Vermessungsverwaltung (LoD2, DGM1, CC BY 4.0) · © OpenStreetMap-Mitwirkende (ODbL)';
   at.style.cssText = 'position:fixed;left:50%;bottom:2px;transform:translateX(-50%);z-index:9999;font:10px sans-serif;color:#fff;opacity:.75;background:rgba(0,0,0,.35);padding:1px 6px;border-radius:3px;pointer-events:none;white-space:nowrap';
   document.body.appendChild(at);
 }
