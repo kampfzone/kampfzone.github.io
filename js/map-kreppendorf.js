@@ -91,6 +91,7 @@ function buildKreppendorfMap() {
     const A = c(-w / 2, 0), B = c(w / 2, 0), Cc = c(w / 2, h), Dd = c(-w / 2, h);
     for (const [q, uu, vv] of [[A, 0, 0], [B, 1, 0], [Cc, 1, 1], [A, 0, 0], [Cc, 1, 1], [Dd, 0, 1]]) { a[0].push(...q); a[1].push(uu * w / 2, vv * h / 2); }
   };
+  const homes = [];   // Wohnhäuser für die Gärten (Straßenseite, Bodenhöhe, Grundriss)
   const box = (mat, x, y, z, w, h, d, rot) => { const m = new THREE.Mesh(boxGeo(w, h, d, 1, 0), mat); m.position.set(x, y + h / 2, z); m.rotation.y = rot; m.castShadow = true; m.receiveShadow = true; scene.add(m); mapMeshes.push(m); };
   D.houses.forEach((h, hi) => {
     const hash = Math.imul(hi + 17, 2654435761) >>> 0, roofM = roofMat(h.c || '8a5040'), wallM = M.walls[(hash >>> 8) % M.walls.length];
@@ -132,6 +133,8 @@ function buildKreppendorfMap() {
       return { n, t, L, ymin, eave, peak, P0, mid, road: roadDist(mid.x, mid.z) };
     }).filter(w => w.L > 2.2 && w.ymin < 0.6 && w.eave - w.ymin > 2.2);
     fac.sort((a, b) => a.road - b.road);   // Haustür an der Straßenseite
+    { let area = 0; for (const f of h.g) for (let i = 0, n3 = f.length; i < n3; i += 3) { const j = (i + 3) % n3; area += f[i] * f[j + 1] - f[j] * f[i + 1]; }
+      if (fac.length && !small && top < 13 && Math.abs(area / 2) < 300) homes.push({ f: fac[0], base, hash, g: h.g }); }
     fac.forEach((w, wi) => {
       const { n, t, L, eave, peak, P0 } = w;
       const cols = Math.max(1, Math.floor((L - 1.2) / 2.7)), step = L / cols;
@@ -176,6 +179,80 @@ function buildKreppendorfMap() {
     }
   });
   for (const [mat, [P, U]] of DET) { mat.side = THREE.DoubleSide; const m = mesh(P, U, mat); m.castShadow = false; }
+
+  /* --- Gärten: Zaun/Hecke zur Straße mit Tor, Briefkasten, Mülltonnen, Weg zur Tür; Seiten-/Rückzäune; hinten Beete, Sitzplatz & Co. --- */
+  const GM = {
+    wood: pbr('wood', 1.5, { mat: { color: new THREE.Color(0.75, 0.6, 0.45) } }), woodW: new THREE.MeshStandardMaterial({ color: 0xe8e4da, roughness: 0.7 }),
+    metal: new THREE.MeshStandardMaterial({ color: 0x2e3236, roughness: 0.45, metalness: 0.7 }), wire: new THREE.MeshStandardMaterial({ color: 0x5a6a5a, roughness: 0.6, metalness: 0.5, transparent: true, opacity: 0.55 }),
+    hedge: HEDGE_MAT, stone: pbr('concrete', 1.5, { mat: { color: new THREE.Color(0.75, 0.72, 0.66) } }), soil: pbr('asphalt', 1, { map: tintedTex('asphalt', 0x4a3020), mat: { color: new THREE.Color(0.5, 0.4, 0.32) } }),
+    paving: pbr('concrete', 1, { mat: { color: new THREE.Color(0.62, 0.6, 0.56), polygonOffset: true, polygonOffsetFactor: -3 } }),
+    flowers: [0xd23a3a, 0xf2c232, 0xb05ad8, 0xffffff, 0xf07ab0].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8 })),
+    bins: [0x2a2a2a, 0x2a56a8, 0x7a4a26, 0xe0c020].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 })),
+    cloth: [0xc83c32, 0x2e6eb8, 0xe8d8a0, 0x3c8a4a].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9, side: THREE.DoubleSide })),
+    bush: new THREE.MeshStandardMaterial({ color: 0x3c6a2c, roughness: 1 }), tramp: new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8 }),
+  };
+  const cyl = (mat, x, y, z, r0, r1, h, seg = 10) => { const m = new THREE.Mesh(withUv2(new THREE.CylinderGeometry(r0, r1, h, seg)), mat); m.position.set(x, y + h / 2, z); m.castShadow = true; m.receiveShadow = true; scene.add(m); mapMeshes.push(m); };
+  const blob = (x, y, z, r) => { const m = new THREE.Mesh(withUv2(new THREE.IcosahedronGeometry(r, 1)), GM.bush); m.position.set(x, y + r * 0.7, z); m.scale.y = 0.8; m.castShadow = true; scene.add(m); mapMeshes.push(m); };
+  const blocked = (x, z) => occ.has(ck(x, z)) || !inside(x, z, 2);
+  // Zaun von A nach B (Bodenhöhe folgt dem Gelände); type: 0 Holzlatten, 1 Metall, 2 Hecke, 3 Maschendraht, 4 Mäuerchen + Holz
+  const fence = (ax, az, bx, bz, type, gapAt = -1) => {
+    const L = Math.hypot(bx - ax, bz - az); if (L < 0.8) return;
+    const tx = (bx - ax) / L, tz = (bz - az) / L, rot = -Math.atan2(tz, tx), seg = type === 2 ? 1.5 : 2;
+    for (let s = 0; s < L - 0.05; s += seg) {
+      const e = Math.min(L, s + seg), m = (s + e) / 2, x = ax + tx * m, z = az + tz * m, y = H(x, z), len = e - s;
+      if (gapAt >= 0 && Math.abs(m - gapAt) < 0.9) continue;   // Gartentor / Einfahrt
+      if (blocked(x, z)) continue;
+      if (type === 2) { box(GM.hedge, x, y - 0.1, z, len + 0.1, 1.35, 0.7, rot); continue; }
+      const px = ax + tx * s, pz = az + tz * s, py = H(px, pz);
+      if (type === 4) { box(GM.stone, x, y - 0.2, z, len, 0.6, 0.3, rot); box(GM.wood, px, py + 0.4, pz, 0.12, 0.75, 0.12, rot); box(GM.wood, x, y + 0.85, z, len, 0.08, 0.04, rot); continue; }
+      box(type === 1 ? GM.metal : type === 3 ? GM.metal : GM.wood, px, py - 0.1, pz, 0.1, type === 3 ? 1.35 : 1.15, 0.1, rot);   // Pfosten
+      if (type === 3) { box(GM.wire, x, y, z, len, 1.2, 0.02, rot); continue; }
+      for (const ry of [0.3, 0.85]) box(type === 1 ? GM.metal : GM.wood, x, y + ry, z, len, 0.06, 0.04, rot);   // Querlatten
+      const slat = type === 1 ? 0.14 : 0.12, step = type === 1 ? 0.14 : 0.22;
+      for (let q = s + step / 2; q < e; q += step) { const sx = ax + tx * q, sz = az + tz * q; box(type === 1 ? GM.metal : (homesHash & 1 ? GM.woodW : GM.wood), sx, H(sx, sz), sz, type === 1 ? 0.025 : slat * 0.8, type === 1 ? 1.0 : 1.0, 0.025, rot); }
+    }
+  };
+  let homesHash = 0;
+  for (const hm of homes) {
+    const { f: w, base, hash } = hm, n = w.n, t = w.t, L = w.L; homesHash = hash;
+    // Grundriss-Tiefe nach hinten (entgegen der Straßenseite)
+    let dmin = 0; for (const g of hm.g) for (let i = 0; i < g.length; i += 3) dmin = Math.min(dmin, (g[i] - w.P0.x) * n.x + (g[i + 1] - w.P0.z) * n.z);
+    const P = (u, o) => [w.P0.x + t.x * u + n.x * o, w.P0.z + t.z * u + n.z * o];
+    const front = Math.min(7, Math.max(0, w.road - 3.6)), back = dmin - 11, u0 = -3.5, u1 = L + 3.5, door = L / 2;
+    const type = [0, 0, 1, 2, 3, 4, 2, 0][hash % 8], sideType = (hash >>> 4) % 3 === 0 ? 2 : 3;
+    // Straßenseite: Zaun mit Gartentor vor der Haustür, Pflasterweg, Briefkasten, Mülltonnen
+    if (front > 1.6) {
+      const [ax, az] = P(u0, front), [bx, bz] = P(u1, front);
+      fence(ax, az, bx, bz, type, door - u0);
+      for (let o = 0.6; o < front; o += 1.0) { const [x, z] = P(door, o); if (!blocked(x, z)) box(GM.paving, x, H(x, z) - 0.04, z, 1.2, 0.08, 1.0, -Math.atan2(t.z, t.x)); }
+      { const [x, z] = P(door + 1.1, front - 0.15); if (!blocked(x, z)) { box(GM.metal, x, H(x, z), z, 0.08, 1.0, 0.08, 0); box(GM.bins[(hash >>> 2) % 2 ? 0 : 3], x, H(x, z) + 1.0, z, 0.4, 0.32, 0.22, -Math.atan2(t.z, t.x)); } }   // Briefkasten
+      for (let b = 0; b < 3; b++) { const [x, z] = P(L + 1.0 + b * 0.75, 0.9); if (!blocked(x, z)) box(GM.bins[b], x, H(x, z), z, 0.6, 1.05, 0.7, -Math.atan2(t.z, t.x)); }   // Restmüll, Papier, Bio
+      if ((hash >>> 6) % 3 === 0) for (let k = 0; k < 4; k++) { const [x, z] = P(u0 + 1 + k * 1.3, front - 0.9); if (!blocked(x, z)) blob(x, H(x, z), z, 0.45); }   // Ziersträucher am Zaun
+    }
+    // Seiten und hinten: Hecke oder Maschendraht
+    { const [a1x, a1z] = P(u0, Math.max(front, 0.5)), [b1x, b1z] = P(u0, back), [a2x, a2z] = P(u1, Math.max(front, 0.5)), [b2x, b2z] = P(u1, back);
+      fence(a1x, a1z, b1x, b1z, sideType); fence(a2x, a2z, b2x, b2z, sideType); fence(b1x, b1z, b2x, b2z, sideType); }
+    // Hinterer Garten: je nach Haus 3–6 Dinge
+    const spots = [[0.2, 0.35], [0.5, 0.6], [0.8, 0.35], [0.3, 0.85], [0.7, 0.85], [0.5, 0.2]];
+    const items = [0, 1, 2, 3, 4, 5, 6, 7, 8].sort((a, b) => ((Math.imul(a + 1, hash) >>> 3) & 255) - ((Math.imul(b + 1, hash) >>> 3) & 255)).slice(0, 3 + hash % 4);
+    items.forEach((it, k) => {
+      const [fu, fo] = spots[k], u = u0 + 1 + (u1 - u0 - 2) * fu, o = dmin - 1.2 - (back - dmin + 1.2) * -fo, [x, z] = P(u, o), y = H(x, z), r = -Math.atan2(t.z, t.x);
+      if (blocked(x, z)) return;
+      if (it === 0) { box(GM.soil, x, y - 0.1, z, 3.2, 0.22, 1.3, r); for (let q = 0; q < 8; q++) { const [fx, fz] = P(u - 1.4 + (q % 4) * 0.9, o - 0.3 + (q >> 2) * 0.6); box(GM.flowers[(hash + q) % 5], fx, H(fx, fz) + 0.1, fz, 0.35, 0.3, 0.35, r); } }   // Blumenbeet
+      else if (it === 1) { box(GM.wood, x, y, z, 2.4, 0.75, 1.1, r); box(GM.soil, x, y + 0.7, z, 2.2, 0.08, 0.9, r); for (let q = 0; q < 4; q++) { const [fx, fz] = P(u - 0.8 + q * 0.55, o); blob(fx, H(fx, fz) + 0.72, fz, 0.22); } }   // Hochbeet mit Salat
+      else if (it === 2) { box(GM.wood, x, y + 0.7, z, 1.6, 0.06, 0.9, r); for (const s of [-0.7, 0.7]) for (const d of [-0.35, 0.35]) { const [lx, lz] = P(u + s, o + d); box(GM.wood, lx, y, lz, 0.06, 0.7, 0.06, r); }
+        for (const s of [-1, 1]) { const [cx, cz] = P(u, o + s * 0.85); box(GM.woodW, cx, y + 0.42, cz, 0.45, 0.05, 0.45, r); box(GM.woodW, cx, y, cz, 0.05, 0.42, 0.05, r); } }   // Tisch + Stühle
+      else if (it === 3) { cyl(GM.metal, x, y, z, 0.03, 0.03, 2.2, 6); cyl(GM.cloth[hash % 4], x, y + 2.0, z, 0.02, 1.4, 0.45, 12); }   // Sonnenschirm
+      else if (it === 4) { for (const s of [-1.8, 1.8]) { const [px, pz] = P(u + s, o); box(GM.metal, px, H(px, pz), pz, 0.06, 1.9, 0.06, r); } box(GM.metal, x, y + 1.85, z, 3.6, 0.02, 0.02, r);
+        for (let q = 0; q < 4; q++) { const [px, pz] = P(u - 1.3 + q * 0.85, o); box(GM.cloth[(hash + q) % 4], px, H(px, pz) + 1.25, pz, 0.6, 0.6, 0.02, r); } }   // Wäscheleine
+      else if (it === 5) { cyl(GM.tramp, x, y + 0.6, z, 1.6, 1.6, 0.06, 18); for (let q = 0; q < 6; q++) { const a = q * Math.PI / 3; cyl(GM.metal, x + Math.cos(a) * 1.6, y, z + Math.sin(a) * 1.6, 0.03, 0.03, 0.62, 5); } }   // Trampolin
+      else if (it === 6) { for (const s of [-1, 1]) { const [px, pz] = P(u + s * 1.2, o); box(GM.wood, px, H(px, pz), pz, 0.1, 2.0, 0.1, r); } box(GM.wood, x, y + 2.0, z, 2.5, 0.1, 0.1, r); box(GM.wood, x, y + 0.45, z, 0.45, 0.04, 0.2, r); box(GM.metal, x, y + 0.49, z, 0.02, 1.5, 0.02, r); }   // Schaukel
+      else if (it === 7) { box(GM.wood, x, y, z, 2.0, 0.25, 2.0, r); box(GM.stone, x, y, z, 1.7, 0.2, 1.7, r); }   // Sandkasten
+      else { for (let q = 0; q < 3; q++) { const [bx, bz] = P(u - 1 + q, o + (q % 2) * 0.6); blob(bx, H(bx, bz), bz, 0.6 + (q % 2) * 0.2); } }   // Büsche
+    });
+    // Terrasse direkt hinter dem Haus
+    { const [x, z] = P(L / 2, dmin - 1.6); if (!blocked(x, z)) box(GM.paving, x, H(x, z) - 0.04, z, Math.min(6, L - 1), 0.1, 3, -Math.atan2(t.z, t.x)); }
+  }
   const freeAt = (x, z, r = 2) => { for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) if (occ.has(ck(x + dx, z + dz))) return false; return inside(x, z); };
   const onRoad = (x, z) => window.krepOnRoad(x, z);
 
