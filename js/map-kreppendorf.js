@@ -7,6 +7,20 @@ function buildKreppendorfMap() {
   const inPoly = (x, z, pts) => { let c = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const [xi, zi] = pts[i], [xj, zj] = pts[j]; if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) c = !c; } return c; };
   const inside = (x, z, m = 0) => Math.abs(x) < S - 4 - m && Math.abs(z) < S - 4 - m;
   /* --- Gelände: echte Höhen (DGM1 Bayern, 2-m-Raster), begehbar über das Hügel-System aus map.js --- */
+  /* Zenn: echtes Bachbett ins Gelände graben (DGM1 zeigt nur die Wasseroberfläche). Abstand zur Bachlinie als 2-m-Raster */
+  const X = window.KREPPX || { stops: [], roads: [], trees: [] }, H0 = window.KREPP_H0 || window.krepH; window.KREPP_H0 = H0;
+  const RIV = D.ways.filter(w => w.k === 'w:river').map(w => P2(w.p)), BRIDGES = X.roads.filter(r => r.b).map(r => P2(r.p));
+  const segDist = (x, z, [ax, az], [bx, bz]) => { const dx = bx - ax, dz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1))); return Math.hypot(ax + dx * t - x, az + dz * t - z); };
+  const RG = { o: -300, s: 2, n: 301 }, RD = new Float32Array(RG.n * RG.n).fill(99);
+  for (const pts of RIV) for (let i = 0; i + 1 < pts.length; i++) {
+    const a = pts[i], b = pts[i + 1], c0 = v => Math.max(0, Math.floor((v - RG.o - 10) / RG.s)), c1 = v => Math.min(RG.n - 1, Math.ceil((v - RG.o + 10) / RG.s));
+    for (let r = c0(Math.min(a[1], b[1])); r <= c1(Math.max(a[1], b[1])); r++) for (let c = c0(Math.min(a[0], b[0])); c <= c1(Math.max(a[0], b[0])); c++) {
+      const k = r * RG.n + c; RD[k] = Math.min(RD[k], segDist(RG.o + c * RG.s, RG.o + r * RG.s, a, b)); }
+  }
+  const rDist = (x, z) => { const fx = Math.min(RG.n - 1.001, Math.max(0, (x - RG.o) / RG.s)), fz = Math.min(RG.n - 1.001, Math.max(0, (z - RG.o) / RG.s)), i = fx | 0, j = fz | 0, u = fx - i, v = fz - j, n = RG.n;
+    return (RD[j * n + i] * (1 - u) + RD[j * n + i + 1] * u) * (1 - v) + (RD[(j + 1) * n + i] * (1 - u) + RD[(j + 1) * n + i + 1] * u) * v; };
+  const carve = d => d < 2.4 ? 1.5 : d < 6 ? 1.5 * (1 - (d - 2.4) / 3.6) ** 1.6 : 0;   // 1,5 m tief, steile Uferböschung
+  window.krepH = (x, z) => H0(x, z) - carve(rDist(x, z));
   const H = window.krepH;
   addHillRegion({ x0: -S - 2, x1: S + 2, z0: -S - 2, z1: S + 2, fn: H });
   // Bauteil(e) aus map.js aufs Gelände heben: alles, was fn() neu in die Szene / Kollision legt, um H(x, z) nach oben
@@ -72,12 +86,23 @@ function buildKreppendorfMap() {
     }
     if (P.length) { const m = mesh(P, U, mat); m.castShadow = false; }
   };
+  // Pflaster (OSM surface=paving_stones): Betonstein-Verbund als eigene Textur
+  MR.pave = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g = cv.getContext('2d');
+    g.fillStyle = '#6d6862'; g.fillRect(0, 0, 256, 256);
+    for (let r = 0; r < 16; r++) for (let c = -1; c < 9; c++) { const l = 150 + ((r * 7 + c * 13) % 5) * 9 - 10; g.fillStyle = `rgb(${l},${l - 4},${l - 10})`; g.fillRect(c * 32 + (r & 1) * 16 + 1, r * 16 + 1, 30, 14); }
+    const tx = new THREE.CanvasTexture(cv); tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.anisotropy = 8; if (THREE.SRGBColorSpace) tx.colorSpace = THREE.SRGBColorSpace;
+    return new THREE.MeshStandardMaterial({ map: tx, color: new THREE.Color(0.24, 0.235, 0.23), roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -3 }); })();
+  const surf = new Map(); for (const r of X.roads) surf.set(Math.round(r.p[0]) + ',' + Math.round(r.p[1]), r);
+  const onBridge = (x, z) => BRIDGES.some(b => b.some((p, i) => i + 1 < b.length && segDist(x, z, p, b[i + 1]) < 1));
+  const resi = [];
   for (const w of D.ways) {
     if (!w.k.startsWith('h:')) continue;
-    const pts = P2(w.p), t = w.k.slice(2), wd = W[t]; if (!wd) continue;
-    const paved = wd >= 3.5 || t === 'cycleway';
-    band(pts, wd, paved ? 0.06 : 0.055, paved ? MR.road : MR.dirt, paved);
-    if (paved && t !== 'service') roadPts.push(pts);
+    const t = w.k.slice(2), xr = surf.get(Math.round(w.p[0]) + ',' + Math.round(w.p[1])) || {}; let wd = parseFloat(xr.w) || W[t]; if (!wd) continue;
+    let pts = P2(w.p); if (xr.b || pts.every(([x, z]) => onBridge(x, z))) continue;   // Brücke wird extra gebaut
+    const paved = wd >= 3.5 || t === 'cycleway' || /asphalt|paved|concrete|paving/.test(xr.s || '');
+    band(pts, wd, paved ? 0.06 : 0.055, xr.s === 'paving_stones' ? MR.pave : paved ? MR.road : MR.dirt, paved);
+    if (paved && t !== 'service' && wd >= 3) roadPts.push(pts);
+    if (t === 'residential' && xr.s !== 'paving_stones') resi.push([pts, wd]);
   }
   window.krepOnRoad = (x, z) => { for (const [x0, z0, x1, z1] of streets) if (x > x0 && x < x1 && z > z0 && z < z1) return true; return false; };
   const roadDist = (x, z) => { let d = 1e9; for (const pts of roadPts) for (let i = 0; i + 1 < pts.length; i++) { const [ax, az] = pts[i], [bx, bz] = pts[i + 1], dx = bx - ax, dz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1))); d = Math.min(d, Math.hypot(ax + dx * t - x, az + dz * t - z)); } return d; };
@@ -251,6 +276,81 @@ function buildKreppendorfMap() {
     for (let i = 0; i < G.pool.length; i += 2) { const x = G.pool[i] + 0.5, z = G.pool[i + 1] + 0.5; box(GM.woodW, x, H(x, z) - 0.2, z, 1.02, 0.28, 1.02, 0); }   // Beckenrand
     for (const [mat, [P, U]] of GD) { const m = mesh(P, U, mat); m.castShadow = false; }
   }
+  /* --- Zenn: Wasserband im Bachbett, Schilf und Ufergebüsch, Betonbrücke --- */
+  const offsetLine = (pts, o) => pts.map((p, i) => { const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [p[0] - (b[1] - a[1]) / L * o, p[1] + (b[0] - a[0]) / L * o]; });
+  { const wm = TKM.water.clone(); wm.color = new THREE.Color(0x26342a); wm.metalness = 0; wm.roughness = 0.12; wm.envMapIntensity = 0.6; wm.polygonOffset = true; wm.polygonOffsetFactor = -1;   // Zenn ist eher bräunlich-grün
+    const P = [], U = [], reeds = [], RW = 4.4;
+    for (const pts0 of RIV) {
+      const pts = []; for (let i = 0; i + 1 < pts0.length; i++) { const [ax, az] = pts0[i], [bx, bz] = pts0[i + 1], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 3)); for (let k = 0; k < n; k++) pts.push([ax + (bx - ax) * k / n, az + (bz - az) * k / n]); }
+      pts.push(pts0[pts0.length - 1]);
+      const ins = pts.filter(([x, z]) => Math.abs(x) < S + 10 && Math.abs(z) < S + 10); if (ins.length < 2) continue;
+      const L = offsetLine(ins, -RW), R = offsetLine(ins, RW); let lvl = 1e9, s = 0;
+      const ys = ins.map(([x, z]) => (lvl = Math.min(lvl, H0(x, z) - 0.75)));   // fließt nach Osten: Wasserspiegel fällt nur
+      for (let i = 0; i + 1 < ins.length; i++) {
+        const ds = Math.hypot(ins[i + 1][0] - ins[i][0], ins[i + 1][1] - ins[i][1]);
+        for (const [q, y, u, v] of [[L[i], ys[i], 0, s], [R[i], ys[i], 1, s], [R[i + 1], ys[i + 1], 1, s + ds], [L[i], ys[i], 0, s], [R[i + 1], ys[i + 1], 1, s + ds], [L[i + 1], ys[i + 1], 0, s + ds]]) { P.push(q[0], y, q[1]); U.push(u * 2, v / 4); }
+        s += ds;
+        // Schilf/Gebüsch auf beiden Ufern (nicht auf Straßen, nicht unter der Brücke)
+        for (const side of [-1, 1]) {
+          const h = Math.imul(i * 31 + side * 7 + 1000, 2654435761) >>> 0; const o = side * (3.6 + (h % 100) / 60), [x, z] = offsetLine([ins[i], ins[i + 1]], o)[0];
+          if (!inside(x, z) || window.krepOnRoad(x, z) || BRIDGES.some(b => segDist(x, z, b[0], b[b.length - 1]) < 6)) continue;
+          if (h % 3) reeds.push(x, H(x, z), z, (h >>> 4) % 7); else if (h % 5 === 0) blob(x, H(x, z) - 0.3, z, 0.9 + (h >>> 8) % 5 * 0.15);
+        }
+      }
+    }
+    if (P.length) { const m = mesh(P, U, wm); m.castShadow = false; m.receiveShadow = true; m.userData.noMerge = true; }
+    // Schilf: gekreuzte Halm-Büschel, alles in einem Mesh
+    const RP = [], RU = [], reedM = new THREE.MeshStandardMaterial({ color: 0x5a6e30, roughness: 1, side: THREE.DoubleSide });
+    for (let i = 0; i < reeds.length; i += 4) { const [x, y, z, k] = reeds.slice(i, i + 4);
+      for (let b = 0; b < 16; b++) { const a = k + b * 2.39, r = 0.15 + (b % 5) * 0.13, ox = Math.cos(a) * r, oz = Math.sin(a) * r, dx = Math.cos(a + 1.6) * 0.045, dz = Math.sin(a + 1.6) * 0.045, h = 1.1 + ((b * 7) % 5) * 0.16, lx = ox * 0.5, lz = oz * 0.5;
+        for (const [px, py, pz] of [[x + ox - dx, y, z + oz - dz], [x + ox + dx, y, z + oz + dz], [x + ox * 1.5 + lx, y + h, z + oz * 1.5 + lz]]) { RP.push(px, py, pz); RU.push(0, 0); } } }
+    if (RP.length) { const m = mesh(RP, RU, reedM); m.castShadow = false; const nr = m.geometry.attributes.normal; for (let i = 0; i < nr.count; i++) nr.setXYZ(i, 0, 1, 0); }
+  }
+  for (const b of BRIDGES) {   // Betonbrücke: Fahrbahn auf Uferhöhe, Brüstung mit Geländer, begehbar
+    const pts = b.filter(([x, z]) => inside(x, z, -20)); if (pts.length < 2) continue;
+    const [ax, az] = pts[0], [bx, bz] = pts[pts.length - 1], L = Math.hypot(bx - ax, bz - az), tx = (bx - ax) / L, tz = (bz - az) / L, rot = -Math.atan2(tz, tx);
+    const e = 2.5, x0 = ax - tx * e, z0 = az - tz * e, x1 = bx + tx * e, z1 = bz + tz * e, LL = L + 2 * e, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, y = Math.max(H0(x0, z0), H0(x1, z1), H0(cx, cz)) + 0.1, BW = 6;
+    box(M.slab, cx, y - 0.6, cz, LL, 0.6, BW, rot); box(MR.road, cx, y - 0.02, cz, LL, 0.04, BW - 1.2, rot);
+    for (const s of [-1, 1]) { const px = cx - tz * s * (BW / 2 - 0.2), pz = cz + tx * s * (BW / 2 - 0.2);
+      box(M.slab, px, y, pz, LL, 0.35, 0.4, rot); box(M.rail, px, y + 0.35, pz, LL, 0.06, 0.08, rot); box(M.rail, px, y + 0.35 + 0.55, pz, LL, 0.06, 0.08, rot);
+      for (let q = -LL / 2; q <= LL / 2 + 0.01; q += 1.5) box(M.rail, px + tx * q, y + 0.35, pz + tz * q, 0.06, 0.6, 0.06, rot); }
+    for (let q = -LL / 2 + 0.5; q < LL / 2; q += 1) collider(cx + tx * q, y - 3, cz + tz * q, 1.1, 3, BW - 0.6);   // Fahrbahn
+    for (const s of [-1, 1]) for (let q = -LL / 2 + 0.5; q < LL / 2; q += 1) collider(cx + tx * q - tz * s * (BW / 2 - 0.2), y, cz + tz * q + tx * s * (BW / 2 - 0.2), 1, 1, 0.4);
+    roadPts.push([[x0, z0], [x1, z1]]); for (let q = 0; q <= LL; q += 3) { const x = x0 + tx * q, z = z0 + tz * q; streets.push([x - 3, z - 3, x + 3, z + 3]); }
+  }
+
+  /* --- Rinnstein (Granit-Bordstein + Pflasterrinne) an den Dorfstraßen, wo Häuser stehen --- */
+  { const curbM = pbr('concrete', 1, { mat: { color: new THREE.Color(0.78, 0.77, 0.74), polygonOffset: true, polygonOffsetFactor: -4 } }), hc = homes.map(hm => [hm.f.mid.x, hm.f.mid.z]);
+    for (const [pts, wd] of resi) {
+      let run = [];
+      const flush = () => { if (run.length > 1) for (const s of [-1, 1]) band(offsetLine(run, s * (wd / 2 - 0.2)), 0.45, 0.075, curbM, false); run = []; };
+      for (let i = 0; i < pts.length; i++) { const [x, z] = pts[i]; if (hc.some(([a, b]) => Math.hypot(a - x, b - z) < 40)) run.push(pts[i]); else { if (run.length) run.push(pts[i]); flush(); } }
+      flush();
+    }
+  }
+
+  /* --- Bushäuschen an der Haltestelle „Kreppendorf“ (OSM, shelter=yes): Glas-Wartehalle, Bank, Haltestellenschild --- */
+  for (const st of X.stops) {
+    let [x, z] = st.p; if (!inside(x, z, 2) || !st.sh) continue;
+    let best = 1e9, nx = 0, nz = 0, rx = 0, rz = 0;   // nächster Straßenpunkt
+    for (const pts of roadPts) for (let i = 0; i + 1 < pts.length; i++) { const [ax, az] = pts[i], [bx, bz] = pts[i + 1], dx = bx - ax, dz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1))), qx = ax + dx * t, qz = az + dz * t, d = Math.hypot(qx - x, qz - z); if (d < best) { best = d; rx = qx; rz = qz; const L = Math.hypot(dx, dz); nx = -dz / L; nz = dx / L; } }
+    if ((x - rx) * nx + (z - rz) * nz < 0) { nx = -nx; nz = -nz; }   // n zeigt von der Straße zum Häuschen
+    const tx = -nz, tz = nx, sx = rx + nx * 5.2, sz = rz + nz * 5.2, y = H(sx, sz), rot = -Math.atan2(tz, tx), Wd = 3.2, Dp = 1.6, Hh = 2.4;
+    const glass = new THREE.MeshStandardMaterial({ color: 0xa8c4cc, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+    const P = (u, o) => [sx + tx * u + nx * o, sz + tz * u + nz * o];
+    box(GM.paving, sx - nx * 0.4, y - 0.15, sz - nz * 0.4,Wd + 1.6, 0.2, Dp + 2.4, rot);   // Pflasterfläche
+    for (const [u, o] of [[-Wd / 2, Dp / 2], [Wd / 2, Dp / 2], [-Wd / 2, -Dp / 2], [Wd / 2, -Dp / 2]]) { const [px, pz] = P(u, o); box(GM.metal, px, y, pz, 0.08, Hh, 0.08, rot); }
+    { const [px, pz] = P(0, Dp / 2); box(glass, px, y + 0.1, pz, Wd, Hh - 0.2, 0.03, rot); collider(px, y, pz, Math.abs(tx) * Wd + 0.2, Hh, Math.abs(tz) * Wd + 0.2); }   // Rückwand
+    for (const s of [-1, 1]) { const [px, pz] = P(s * Wd / 2, 0); box(glass, px, y + 0.1, pz, 0.03, Hh - 0.2, Dp, rot); }   // Seitenwände
+    { const [px, pz] = P(0, 0); box(GM.metal, px, y + Hh, pz, Wd + 0.4, 0.12, Dp + 0.5, rot); }   // Dach
+    { const [px, pz] = P(0, Dp / 2 - 0.3); box(GM.wood, px, y + 0.45, pz, Wd - 0.6, 0.06, 0.4, rot); for (const s of [-1, 1]) { const [qx, qz] = P(s * (Wd / 2 - 0.5), Dp / 2 - 0.3); box(GM.metal, qx, y, qz, 0.06, 0.45, 0.35, rot); } }   // Bank
+    { const [px, pz] = P(Wd / 2 + 0.9, -1.4); box(GM.metal, px, y, pz, 0.07, 2.4, 0.07, 0);   // Haltestellenschild (grünes H auf gelb) + Fahrplan
+      const sg = document.createElement('canvas'); sg.width = sg.height = 128; const g = sg.getContext('2d'); g.fillStyle = '#f2d21b'; g.beginPath(); g.arc(64, 64, 62, 0, 7); g.fill(); g.strokeStyle = '#1d7a3a'; g.lineWidth = 7; g.beginPath(); g.arc(64, 64, 55, 0, 7); g.stroke(); g.fillStyle = '#1d7a3a'; g.font = 'bold 80px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('H', 64, 68);
+      const sm = new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(sg), transparent: true, alphaTest: 0.5, side: THREE.DoubleSide });
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.55), sm); sign.position.set(px, y + 2.25, pz); sign.rotation.y = rot; scene.add(sign);
+      box(GM.woodW, px + tx * 0.05, y + 1.3, pz + tz * 0.05, 0.4, 0.5, 0.04, rot); }
+  }
+
   const freeAt = (x, z, r = 2) => { for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) if (occ.has(ck(x + dx, z + dz))) return false; return inside(x, z); };
   const onRoad = (x, z) => window.krepOnRoad(x, z);
 
@@ -260,6 +360,7 @@ function buildKreppendorfMap() {
     lift(x, z, () => srand() < 0.3 ? tree(x, z, srnd(1.5, 2.3)) : leafTree(x, z, srnd(0.9, 1.35)));
   }
 
+  for (let i = 0; i < (X.trees || []).length; i += 2) { const x = X.trees[i], z = X.trees[i + 1]; if (inside(x, z) && freeAt(x, z, 1) && !TREE_BOXES.some(b => x > b.min.x - 3 && x < b.max.x + 3 && z > b.min.z - 3 && z < b.max.z + 3)) lift(x, z, () => leafTree(x, z, 1.3)); }   // Einzelbäume aus OSM
   /* --- Rand: Hecke + unsichtbare Wand --- */
   for (const s of [-1, 1]) {
     for (let t = -S; t < S; t += 6) { lift(t + 3, s * S, () => addBox(t + 3, -1, s * S, 6.2, 2.6, 1.2, HEDGE_MAT, 1, { decor: true, round: 0.4 })); lift(s * S, t + 3, () => addBox(s * S, -1, t + 3, 1.2, 2.6, 6.2, HEDGE_MAT, 1, { decor: true, round: 0.4 })); }
