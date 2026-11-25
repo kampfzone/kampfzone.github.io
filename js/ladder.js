@@ -100,6 +100,51 @@
   window.LADDERS = LADDERS;
   try { build(); } catch (e) { console.warn('Leitern', e); }
 
+  /* --- Leiter selbst setzen: Taste L vor einer Wand (max. 8 pro Spieler, die älteste verschwindet) --- */
+  const OWN = {}, LMAT = new THREE.MeshStandardMaterial({ color: 0xc8a040, metalness: 0.3, roughness: 0.6 });
+  function ladderMesh(l) {
+    const g = new THREE.Group(), H = l.y1 + 1 - l.y0;
+    g.position.set(l.x, l.y0, l.z); g.rotation.y = Math.atan2(l.nx, l.nz);
+    for (const sd of [-0.25, 0.25]) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.06, H, 0.06), LMAT); r.position.set(sd, H / 2, 0); g.add(r); }
+    const rg = new THREE.CylinderGeometry(0.02, 0.02, 0.5, 6).rotateZ(Math.PI / 2);
+    for (let y = 0.3; y < H - 0.05; y += 0.32) { const r = new THREE.Mesh(rg, LMAT); r.position.y = y; g.add(r); }
+    g.traverse(o => { o.castShadow = true; }); scene.add(g); return g;
+  }
+  function addOwn(id, l) {
+    if (!l || ![l.x, l.z, l.y0, l.y1, l.nx, l.nz].every(Number.isFinite) || l.y1 - l.y0 > 45 || l.y1 <= l.y0) return;
+    const a = OWN[id] || (OWN[id] = []);
+    if (a.length >= 8) { const o = a.shift(); scene.remove(o.mesh); const k = LADDERS.indexOf(o.l); if (k >= 0) LADDERS.splice(k, 1); }
+    const L = { x: l.x, z: l.z, nx: l.nx, nz: l.nz, y0: l.y0, y1: l.y1 };
+    LADDERS.push(L); a.push({ l: L, mesh: ladderMesh(L) });
+  }
+  window.ladderRecv = (id, l) => addOwn(id, l);
+  window.placeLadder = () => {
+    if (!me.alive || (typeof ride === 'object' && ride.v >= 0)) return;
+    const d = new THREE.Vector3(-Math.sin(me.yaw), 0, -Math.cos(me.yaw)), o = new THREE.Vector3(me.pos.x, me.pos.y + 1.0, me.pos.z);
+    const h = rayMap(o, d, 3);
+    const n = h && (Array.isArray(h.normal) ? h.normal : h.normal ? [h.normal.x, h.normal.y, h.normal.z] : null);
+    if (!h || !n || Math.abs(n[1]) > 0.5) { if (typeof showMsg === 'function') showMsg('🪜 Stell dich direkt vor eine Wand (max. 3 m), dann L'); return; }
+    const p = h.point || o.clone().addScaledVector(d, h.dist);
+    // Box der Wand finden → Dachhöhe
+    const ix = p.x - n[0] * 0.05, iz = p.z - n[2] * 0.05; let top = -1;
+    for (const b of (typeof nearBoxes === 'function' ? nearBoxes(ix, iz, 1) : boxes)) if (ix > b.min.x && ix < b.max.x && iz > b.min.z && iz < b.max.z && p.y > b.min.y - 0.1 && p.y < b.max.y + 0.1) top = Math.max(top, b.max.y);
+    // gestapelte Kästen: so lange weiter nach oben, wie direkt darüber noch eine Box an dieser Wand ist
+    for (let k = 0; k < 20 && top > 0; k++) { let up = -1; for (const b of nearBoxes(ix, iz, 1)) if (ix > b.min.x && ix < b.max.x && iz > b.min.z && iz < b.max.z && b.min.y <= top + 0.05 && b.max.y > top + 0.05) up = Math.max(up, b.max.y); if (up < 0) break; top = up; }
+    const gy = groundH(p.x + n[0] * 0.5, p.z + n[2] * 0.5, me.pos.y + 0.5);
+    if (top < gy + 1.5) { if (typeof showMsg === 'function') showMsg('🪜 Hier passt keine Leiter'); return; }
+    if (top - gy > 45) { if (typeof showMsg === 'function') showMsg('🪜 Zu hoch für eine Leiter (max. 45 m)'); return; }
+    const l = { x: +(p.x + n[0] * 0.07).toFixed(2), z: +(p.z + n[2] * 0.07).toFixed(2), nx: n[0], nz: n[2], y0: +gy.toFixed(2), y1: +top.toFixed(2) };
+    addOwn(typeof myId === 'string' ? myId : 'me', l);
+    try { net.send({ t: 'lad', l }); } catch (e) {}
+    if (typeof sndClick === 'function') sndClick(0.08, 0.6);
+    if (typeof showMsg === 'function') showMsg('🪜 Leiter gesetzt (' + Math.round(top - gy) + ' m) – W = hochklettern');
+  };
+  addEventListener('keydown', e => {
+    if (e.code !== 'KeyL' || e.repeat || typeof running === 'undefined' || !running) return;
+    const t = e.target; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    placeLadder();
+  });
+
   let hintT = 0, stepT = 0;
   // pro Bild aus game.js: true = man hängt an der Leiter (dann keine Schwerkraft, kein normaler Sprung)
   window.ladderTick = (dt, iF, fx, fz) => {

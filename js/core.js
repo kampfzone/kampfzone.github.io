@@ -16,8 +16,8 @@ if (PORTAL) {
   document.head.appendChild(st);
 }
 
-/* Update-Prüfung: beim Veröffentlichen wird 20261125-194018 durch eine Versionsnummer ersetzt */
-const BUILD = '20261125-194018';
+/* Update-Prüfung: beim Veröffentlichen wird 20261125-200350 durch eine Versionsnummer ersetzt */
+const BUILD = '20261125-200350';
 // Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
 // Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
 const UPD = { newer: null };
@@ -875,7 +875,7 @@ function roundedBoxGeo(w, h, d, r, m = 2, tile = 0) {
 var WELT_ZS = window.WELT_ZS = 1320;   // Südrand der Karte Welt (z): bis z ~1190 flach (Südstadt mit Autohaus, Wohngebiet, Gewerbe), dahinter Berge
 (function ground() {
   // Asphalt über die ganze Spielfläche (Tokio: x/z -101 … 101; Hafenviertel: x -62 … 56, z -62 … 62)
-  const hafen = MAP_ID === 'hafen', krep = KREP_MAP, welt = MAP_ID === 'welt' || krep, FW = hafen ? 118 : krep ? 560 : welt ? 2140 : 203, FD = hafen ? 124 : krep ? 560 : welt ? 780 + (WELT_ZS - 440) : 203;   // Kreppendorf: x/z -280 … 280, Wiese wie Welt   // Welt: x -390 … 1750 (Osten: F1-Strecke + Flughafen, dahinter Militärflugplatz)
+  const hafen = MAP_ID === 'hafen', krep = KREP_MAP, welt = MAP_ID === 'welt' || krep, KR = krep ? window.KREPP.R : 0, FW = hafen ? 118 : krep ? KR * 2 + 40 : welt ? 2140 : 203, FD = hafen ? 124 : krep ? KR * 2 + 40 : welt ? 780 + (WELT_ZS - 440) : 203;   // Kreppendorf: x/z -280 … 280, Wiese wie Welt   // Welt: x -390 … 1750 (Osten: F1-Strecke + Flughafen, dahinter Militärflugplatz)
   // Welt: Wiese als Boden (Straßen kommen als Asphaltstreifen darauf), sonst Asphalt
   // Welt: saftig grüne Wiese (eingefärbtes Gras-Foto, 5-m-Kacheln)
   const wiese = welt ? tintedTex('grass', 0x587a34) : null; if (wiese) wiese.repeat.set(FW / 5, FD / 5);
@@ -896,7 +896,7 @@ var WELT_ZS = window.WELT_ZS = 1320;   // Südrand der Karte Welt (z): bis z ~11
   // Hügel rund um die (quadratische) Karte, im Osten Hafenbecken
   // Abstand zum Rand: Stadt + Skyline reichen bis ~225 m, erst dahinter beginnen die Hügel
   const mapEdge = hafen ? (x, z) => Math.max(Math.abs(x + 3), z > 0 ? Math.max(0, z - 70) : -z)
-    : krep ? (x, z) => Math.max(Math.abs(x), Math.abs(z)) - 200
+    : krep ? (x, z) => Math.max(Math.abs(x), Math.abs(z)) - (KR - 60)
     : welt ? (x, z) => {   // Osten: durchgehend flach bis x 1040 (Ringstadt, F1-Ring, Flughafen), dann Bergrücken (Windräder),
       // dahinter flaches Tal (x 1160 … 1690, Militärflugplatz), ganz außen Berge; Süden: flach bis z ~1190 (Südstadt), östlich davon steigt der Bergrücken weiter an
       const zE = z < 0 ? -z - 312 : Math.min(z - 312, Math.max(z - (WELT_ZS - 128), x - 972));
@@ -911,7 +911,7 @@ var WELT_ZS = window.WELT_ZS = 1320;   // Südrand der Karte Welt (z): bis z ~11
     let hills = sstep(68, welt ? 140 : 200, edge) * (fbm(x * 0.008 + 3, z * 0.008) * 70 + 4) + (welt ? 0 : sstep(63, 85, edge) * fbm(x * 0.06, z * 0.06) * 2);
     if (welt && !krep) hills *= sstep(8, 30, Math.abs(x)) * sstep(8, 30, Math.abs(z));
     const sea = welt ? 0 : hafen ? sstep(54, 62, x) : sstep(101, 108, x);
-    if (krep) return window.krepH(x, z) - (Math.max(Math.abs(x), Math.abs(z)) < 263 ? 5 : 0.4) + hills;   // Kreppendorf: echte Geländehöhen (genaues Netz kommt aus map-kreppendorf.js)
+    if (krep) return window.krepH(x, z) - (Math.max(Math.abs(x), Math.abs(z)) < KR + 3 ? 5 : 0.4) + hills;   // Kreppendorf: echte Geländehöhen (genaues Netz kommt aus map-kreppendorf.js)
     return hills * (1 - sea) - 6 * sea - 0.06;
   };
   const geo = welt && !krep ? new THREE.PlaneGeometry(2350, 1000 + (WELT_ZS - 440), 470, 200 + Math.round((WELT_ZS - 440) / 5)) : new THREE.PlaneGeometry(1000, 1000, 120, 120); geo.rotateX(-Math.PI / 2); if (welt && !krep) geo.translate(675, 0, (WELT_ZS - 440) / 2);   // Welt: x -500 … 1850, z -500 … WELT_ZS + 60

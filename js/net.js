@@ -132,6 +132,12 @@ function nextTeam() {
 }
 function hostHandle(from, m) {
   const P = H.players;
+  if (m.t === 'lad') {   // gesetzte Leiter (ladder.js) an alle anderen
+    if (!P[from] || !m.l) return;
+    for (const id in H.conns) if (id !== from && H.conns[id].open) H.conns[id].send({ t: 'lad', id: from, l: m.l });
+    if (from !== myId && window.ladderRecv) ladderRecv(from, m.l);
+    return;
+  }
   if (m.t === 'vc') {   // Sprachchat: Ton an alle anderen weiterreichen (voice.js)
     if (!P[from] || !m.d) return;
     for (const id in H.conns) if (id !== from && H.conns[id].open) H.conns[id].send(m.o ? { t: 'vc', id: from, d: m.d, o: m.o } : m.r ? { t: 'vc', id: from, d: m.d, r: m.r } : { t: 'vc', id: from, d: m.d });
@@ -398,6 +404,7 @@ function updateBots(dt, now) {
 const radarPing = {};
 function clientHandle(m) {
   if (m.t === 'vc') { if (window.vcRecv) vcRecv(m.id, m.d, m.o, m.r); return; }   // Sprachchat (voice.js)
+  if (m.t === 'lad') { if (window.ladderRecv) ladderRecv(m.id, m.l); return; }   // gesetzte Leiter (ladder.js)
   if (m.t === 'welcome') {
     // Host spielt eine andere Karte → diese laden und automatisch wieder beitreten
     if (m.map && m.map !== MAP_ID) {

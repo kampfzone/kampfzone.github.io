@@ -11,7 +11,7 @@ function buildKreppendorfMap() {
   const X = window.KREPPX || { stops: [], roads: [], trees: [] }, H0 = window.KREPP_H0 || window.krepH; window.KREPP_H0 = H0;
   const RIV = D.ways.filter(w => w.k === 'w:river').map(w => P2(w.p)), BRIDGES = X.roads.filter(r => r.b).map(r => P2(r.p));
   const segDist = (x, z, [ax, az], [bx, bz]) => { const dx = bx - ax, dz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1))); return Math.hypot(ax + dx * t - x, az + dz * t - z); };
-  const RG = { o: -300, s: 2, n: 301 }, RD = new Float32Array(RG.n * RG.n).fill(99);
+  const RG = { o: -(D.R + 40), s: 2, n: D.R + 41 }, RD = new Float32Array(RG.n * RG.n).fill(99);
   for (const pts of RIV) for (let i = 0; i + 1 < pts.length; i++) {
     const a = pts[i], b = pts[i + 1], c0 = v => Math.max(0, Math.floor((v - RG.o - 10) / RG.s)), c1 = v => Math.min(RG.n - 1, Math.ceil((v - RG.o + 10) / RG.s));
     for (let r = c0(Math.min(a[1], b[1])); r <= c1(Math.max(a[1], b[1])); r++) for (let c = c0(Math.min(a[0], b[0])); c <= c1(Math.max(a[0], b[0])); c++) {
@@ -33,7 +33,7 @@ function buildKreppendorfMap() {
   /* --- Echtes Luftbild (DOP20 Bayern, 20 cm/Pixel) für Boden und Dächer; Feinstruktur aus der Grastextur --- */
   const DOP = new THREE.TextureLoader().load('textures/' + MAP_ID + '-dop20.jpg');
   DOP.encoding = THREE.sRGBEncoding; DOP.anisotropy = renderer.capabilities.getMaxAnisotropy(); DOP.wrapS = DOP.wrapT = THREE.ClampToEdgeWrapping;
-  const dopUv = (x, z) => [(x + 264) / 528, (264 - z) / 528];
+  const DR = D.R + 4, dopUv = (x, z) => [(x + DR) / (2 * DR), (DR - z) / (2 * DR)];
   const dopMat = (detailScale, detailAmt, extra = {}) => {
     const m = new THREE.MeshStandardMaterial(Object.assign({ map: DOP, roughness: 0.95, color: new THREE.Color(0.5, 0.5, 0.5) }, extra)), det = tintedTex('grass', 0xffffff);
     m.onBeforeCompile = sh => { sh.uniforms.detailMap = { value: det };
@@ -71,7 +71,7 @@ function buildKreppendorfMap() {
   };
 
   /* --- Boden: echtes Gras (mit Halmen aus grass.js) auf dem DGM1-Gelände, eingefärbt mit den Farben aus dem Luftbild (Felder, Gärten, Höfe) */
-  { const R0 = 264, C = 2, n = R0 * 2 / C, pos = [], uv = [], col = [], idx = [], G = D.gc, raw = atob(G.b), tmp = new THREE.Color();
+  { const R0 = D.R + 4, C = 2, n = R0 * 2 / C, pos = [], uv = [], col = [], idx = [], G = D.gc, raw = atob(G.b), tmp = new THREE.Color();
     for (let i = 0; i <= n; i++) for (let j = 0; j <= n; j++) {
       const x = -R0 + j * C, z = -R0 + i * C, k = (i * G.n + j) * 3; pos.push(x, H(x, z) + 0.03, z); uv.push(...dopUv(x, z));
       tmp.setRGB(raw.charCodeAt(k) / 255, raw.charCodeAt(k + 1) / 255, raw.charCodeAt(k + 2) / 255).convertSRGBToLinear();
@@ -247,7 +247,7 @@ function buildKreppendorfMap() {
     for (let s = 0; s < L - 0.05; s += seg) {
       const e = Math.min(L, s + seg), m = (s + e) / 2, x = ax + tx * m, z = az + tz * m, y = H(x, z), len = e - s;
       if (gapAt >= 0 && Math.abs(m - gapAt) < 0.9) continue;   // Gartentor / Einfahrt
-      if (blocked(x, z)) continue;
+      if (blocked(x, z) || window.krepOnRoad(x, z)) continue;   // kein Zaun quer über Straßen
       { const sx0 = ax + tx * s, sz0 = az + tz * s, sx1 = ax + tx * e, sz1 = az + tz * e, ch = type === 4 ? 0.95 : 1.05;   // Kollision: nicht durchlaufen, aber drüberspringen/-klettern (1 m hoch)
         if (Math.abs(tx) > 0.96 || Math.abs(tz) > 0.96) collider(x, y - 0.3, z, Math.abs(sx1 - sx0) + 0.25, ch + 0.3, Math.abs(sz1 - sz0) + 0.25);
         else for (let q = s + 0.25; q < e; q += 0.5) { const qx = ax + tx * q, qz = az + tz * q; collider(qx, H(qx, qz) - 0.3, qz, 0.45, ch + 0.3, 0.45); } }
@@ -406,7 +406,7 @@ function buildKreppendorfMap() {
   for (let i = 0, nm = 0; i < 400 && nm < 8; i++) { const [x, z] = hcs[i % hcs.length]; const px = x + srnd(-12, 12), pz = z + srnd(-12, 12); if (onRoad(px, pz) && freeAt(px, pz, 2)) { vspot(px, pz, srand() * 6.28); nm++; } }   // Mopeds im Dorf
   { const pad = new THREE.MeshStandardMaterial({ color: 0x5d6168, roughness: 0.85 }), ring = new THREE.MeshStandardMaterial({ color: 0xf2d21b, roughness: 0.8 });
     for (let i = 0, nh = 0; i < 3000 && nh < 2; i++) {   // Heli-Landeplätze auf freien, flachen Wiesen nahe am Dorf
-      const x = srnd(-220, 220), z = srnd(-220, 220);
+      const x = srnd(-(D.R - 40), D.R - 40), z = srnd(-(D.R - 40), D.R - 40);
       if (!freeAt(x, z, 8) || onRoad(x, z) || treeNear(x, z, 10) || !nearHome(x, z, 80) || nearHome(x, z, 25) || Math.abs(H(x + 6, z) - H(x - 6, z)) + Math.abs(H(x, z + 6) - H(x, z - 6)) > 1.2) continue;
       if (MAP_VEHICLES.some(v => v.kind === 'heli' && Math.hypot(v.x - x, v.z - z) < 80)) continue;
       cyl(pad, x, H(x, z) - 0.3, z, 7, 7, 0.4, 24); cyl(ring, x, H(x, z) - 0.28, z, 6.2, 6.2, 0.4, 24); cyl(pad, x, H(x, z) - 0.26, z, 5.6, 5.6, 0.4, 24);
