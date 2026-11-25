@@ -4,7 +4,7 @@
 window.KZ_EN = {
 exact: {
 // ---- Startmenü
-"HAFENVIERTEL · ONLINE-SHOOTER": "ONLINE SHOOTER", "Dein Name": "Your name", "z. B. Luis": "e.g. Alex", "Karte": "Map", "🏡 Kreppendorf – echtes Dorf an der Zenn, Wald & Felder": "🏡 Kreppendorf – real village on the Zenn, woods & fields",
+"HAFENVIERTEL · ONLINE-SHOOTER": "ONLINE SHOOTER", "Dein Name": "Your name", "z. B. Luis": "e.g. Alex", "Karte": "Map", "🏡 Kreppendorf – echtes Dorf an der Zenn, Wald & Felder": "🏡 Kreppendorf – real village on the Zenn, woods & fields", "🏘️ Sonnenhof – echtes Wohngebiet in Veitsbronn": "🏘️ Sonnenhof – real housing estate in Veitsbronn",
 "🗼 Tokio – große Stadt mit Hochstraße": "🗼 Tokyo – big city with elevated highway", "⚓ Hafenviertel – klassisch, mit Simson-Crosspark": "⚓ Harbour – classic, with moped cross park",
 "🌍 Welt – riesig: Stadt, Dorf, Hof, Wald, Autos & Jobs": "🌍 World – huge: city, village, farm, forest, cars & jobs",
 "Bot-Schwierigkeit": "Bot difficulty", "🟢 Leicht – reagieren langsam, treffen selten": "🟢 Easy – slow reactions, rarely hit", "🟡 Normal": "🟡 Normal",

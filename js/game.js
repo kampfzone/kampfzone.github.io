@@ -685,10 +685,11 @@ function updateLocal(dt, now) {
     }
     const acc = 1 - Math.exp(-(me.onGround ? (me.slideT > 0 ? 30 : 14) : 3) * dt);
     me.vel.x += (wx - me.vel.x) * acc; me.vel.z += (wz - me.vel.z) * acc;
-    if (keys.Space && me.onGround && !me.crouch) { me.vel.y = 8.2; me.onGround = false; sndStep(0.06); }
-    if (keys.Space && me.slideT > 0 && me.onGround) { me.slideT = 0; me.crouch = false; me.h = PH; me.vel.y = 8.2; me.onGround = false; }  // Sprung aus dem Rutschen
+    const climbing = window.ladderTick ? ladderTick(dt, iF, fx, fz) : false;   // Leiter (ladder.js)
+    if (!climbing && keys.Space && me.onGround && !me.crouch) { me.vel.y = 8.2; me.onGround = false; sndStep(0.06); }
+    if (!climbing && keys.Space && me.slideT > 0 && me.onGround) { me.slideT = 0; me.crouch = false; me.h = PH; me.vel.y = 8.2; me.onGround = false; }  // Sprung aus dem Rutschen
     const wasAir = !me.onGround, vyBefore = me.vel.y;
-    me.vel.y = Math.max(-30, me.vel.y - GRAV * dt);
+    if (!climbing) me.vel.y = Math.max(-30, me.vel.y - GRAV * dt);
     moveBody(me, me.vel.x * dt, me.vel.y * dt, me.vel.z * dt);
     if (wasAir && me.onGround && vyBefore < -7) { me.landT = Math.min(0.3, -vyBefore * 0.025); sndStep(Math.min(0.2, -vyBefore * 0.012)); }
     if (me.pos.y < -10) me.pos.set(0, 5, 0);

@@ -79,7 +79,7 @@ function versionWarn(text) {
   bar.classList.remove('hidden');
   feed(esc(text + ' Bitte alle neu laden (F5).'));
 }
-function showMapSwitch(id) { const el = $('menuMsg'); if (el) el.textContent = `Der Host spielt „${id === 'hafen' ? 'Hafenviertel' : id === 'kreppendorf' ? 'Kreppendorf' : id === 'welt' ? 'Welt' : 'Tokio'}“ – Karte wird geladen und du trittst automatisch bei …`; }
+function showMapSwitch(id) { const el = $('menuMsg'); if (el) el.textContent = `Der Host spielt „${id === 'hafen' ? 'Hafenviertel' : id === 'kreppendorf' ? 'Kreppendorf' : id === 'sonnenhof' ? 'Sonnenhof' : id === 'welt' ? 'Welt' : 'Tokio'}“ – Karte wird geladen und du trittst automatisch bei …`; }
 // Nach dem Kartenwechsel automatisch wieder beitreten
 try {
   const c = sessionStorage.getItem('kz_autojoin');

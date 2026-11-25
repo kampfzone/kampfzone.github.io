@@ -31,7 +31,7 @@ function buildKreppendorfMap() {
   };
 
   /* --- Echtes Luftbild (DOP20 Bayern, 20 cm/Pixel) für Boden und Dächer; Feinstruktur aus der Grastextur --- */
-  const DOP = new THREE.TextureLoader().load('textures/kreppendorf-dop20.jpg');
+  const DOP = new THREE.TextureLoader().load('textures/' + MAP_ID + '-dop20.jpg');
   DOP.encoding = THREE.sRGBEncoding; DOP.anisotropy = renderer.capabilities.getMaxAnisotropy(); DOP.wrapS = DOP.wrapT = THREE.ClampToEdgeWrapping;
   const dopUv = (x, z) => [(x + 264) / 528, (264 - z) / 528];
   const dopMat = (detailScale, detailAmt, extra = {}) => {
@@ -49,7 +49,8 @@ function buildKreppendorfMap() {
   const ROOF_MATS = new Map();
   const roofMat = hex => {   // echte Dachfarbe aus dem Luftbild, etwas kräftiger (Luftbild ist hell und blass)
     const k = qc(hex); if (ROOF_MATS.has(k)) return ROOF_MATS.get(k);
-    const c = new THREE.Color(k); const hsl = {}; c.getHSL(hsl); c.setHSL(hsl.h, Math.min(1, hsl.s * 1.6), hsl.l * 0.8);
+    const c = new THREE.Color(k); const hsl = {}; c.getHSL(hsl); const warm = hsl.h < 0.12 || hsl.h > 0.94;   // Ziegelrot/-braun kräftiger, graue/anthrazit Dächer (bläulich im Luftbild) entsättigen
+    c.setHSL(warm ? hsl.h : 0.6, warm ? Math.min(1, hsl.s * 1.6) : Math.min(0.08, hsl.s * 0.4), hsl.l * 0.8);
     const m = pbr('roof', 2.5, { map: tintedTex('roof', c.getHex()), mat: { side: THREE.DoubleSide } }); ROOF_MATS.set(k, m); return m;
   };
   const M = {
@@ -386,7 +387,7 @@ function buildKreppendorfMap() {
     for (let t = -S; t < S; t += 6) { lift(t + 3, s * S, () => addBox(t + 3, -1, s * S, 6.2, 2.6, 1.2, HEDGE_MAT, 1, { decor: true, round: 0.4 })); lift(s * S, t + 3, () => addBox(s * S, -1, t + 3, 1.2, 2.6, 6.2, HEDGE_MAT, 1, { decor: true, round: 0.4 })); }
     collider(0, -20, s * (S + 0.5), 2 * S + 6, 200, 2); collider(s * (S + 0.5), -20, 0, 2, 200, 2 * S + 6);
   }
-  const townSign = (x, z, rot) => lift(x, z, () => { addBox(x, 0, z, 0.12, 2.2, 0.12, MAT.metal, 1, { round: 0.05 }); tkSign(x, 2.3, z, 2.8, 0.9, rot, tkSignMat('KREPPENDORF', '#f2d21b', '#111111', false)); });
+  const townSign = (x, z, rot) => lift(x, z, () => { addBox(x, 0, z, 0.12, 2.2, 0.12, MAT.metal, 1, { round: 0.05 }); tkSign(x, 2.3, z, 2.8, 0.9, rot, tkSignMat(MAP_ID === 'sonnenhof' ? 'VEITSBRONN' : 'KREPPENDORF', '#f2d21b', '#111111', false)); });
 
   /* --- Fahrzeuge wie auf den anderen Karten: Autos am Straßenrand, Mopeds, 2 Panzer, 2 Helis auf Landeplätzen --- */
   const hcs = homes.map(hm => [hm.f.mid.x, hm.f.mid.z]);

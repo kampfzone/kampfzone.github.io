@@ -16,8 +16,8 @@ if (PORTAL) {
   document.head.appendChild(st);
 }
 
-/* Update-Prüfung: beim Veröffentlichen wird 20261125-191915 durch eine Versionsnummer ersetzt */
-const BUILD = '20261125-191915';
+/* Update-Prüfung: beim Veröffentlichen wird 20261125-194018 durch eine Versionsnummer ersetzt */
+const BUILD = '20261125-194018';
 // Im Menü wird eine neue Version automatisch geladen; mitten im Spiel erscheint der gelbe Balken.
 // Neu laden immer mit neuer Adresse (?u=…), damit der Browser nicht die zwischengespeicherte alte Seite nimmt.
 const UPD = { newer: null };
@@ -55,8 +55,9 @@ document.getElementById('btnUpdate').onclick = () => freshReload(UPD.newer);
 const MAP_ID = (() => {
   let m = 'tokio';
   try { m = new URLSearchParams(location.search).get('map') || localStorage.getItem('kz_map') || 'tokio'; } catch (e) {}
-  return m === 'hafen' || m === 'welt' || m === 'kreppendorf' ? m : 'tokio';
+  return m === 'hafen' || m === 'welt' || m === 'kreppendorf' || m === 'sonnenhof' ? m : 'tokio';
 })();
+const KREP_MAP = MAP_ID === 'kreppendorf' || MAP_ID === 'sonnenhof';   // echte Orte aus Bayern-Daten (gleicher Kartenbauer)
 // Karte wechseln (im Menü) bzw. auf die Karte des Hosts umschalten: Seite mit ?map=… neu laden
 function switchMap(id, joinCode) {
   try { localStorage.setItem('kz_map', id); if (joinCode) sessionStorage.setItem('kz_autojoin', joinCode); } catch (e) {}
@@ -476,7 +477,7 @@ function genStepBuffers() {
 // Untergrund an einer Stelle: Gras auf den Wiesen/Hügeln der Karte „Welt“, Holz/Metall auf erhöhten Böden, sonst Asphalt/Beton
 function stepSurface(x, y, z) {
   if (y > 0.35) { const gh = typeof hillH === 'function' ? hillH(x, z) : 0; if (y - gh > 0.35) return y > 3 ? 'metal' : 'wood'; }
-  if ((MAP_ID === 'welt' || MAP_ID === 'kreppendorf') && typeof carOnRoad === 'function' && !carOnRoad(x, z)) return 'grass';
+  if ((MAP_ID === 'welt' || KREP_MAP) && typeof carOnRoad === 'function' && !carOnRoad(x, z)) return 'grass';
   return 'hard';
 }
 let stepSide = 1;
@@ -874,7 +875,7 @@ function roundedBoxGeo(w, h, d, r, m = 2, tile = 0) {
 var WELT_ZS = window.WELT_ZS = 1320;   // Südrand der Karte Welt (z): bis z ~1190 flach (Südstadt mit Autohaus, Wohngebiet, Gewerbe), dahinter Berge
 (function ground() {
   // Asphalt über die ganze Spielfläche (Tokio: x/z -101 … 101; Hafenviertel: x -62 … 56, z -62 … 62)
-  const hafen = MAP_ID === 'hafen', krep = MAP_ID === 'kreppendorf', welt = MAP_ID === 'welt' || krep, FW = hafen ? 118 : krep ? 560 : welt ? 2140 : 203, FD = hafen ? 124 : krep ? 560 : welt ? 780 + (WELT_ZS - 440) : 203;   // Kreppendorf: x/z -280 … 280, Wiese wie Welt   // Welt: x -390 … 1750 (Osten: F1-Strecke + Flughafen, dahinter Militärflugplatz)
+  const hafen = MAP_ID === 'hafen', krep = KREP_MAP, welt = MAP_ID === 'welt' || krep, FW = hafen ? 118 : krep ? 560 : welt ? 2140 : 203, FD = hafen ? 124 : krep ? 560 : welt ? 780 + (WELT_ZS - 440) : 203;   // Kreppendorf: x/z -280 … 280, Wiese wie Welt   // Welt: x -390 … 1750 (Osten: F1-Strecke + Flughafen, dahinter Militärflugplatz)
   // Welt: Wiese als Boden (Straßen kommen als Asphaltstreifen darauf), sonst Asphalt
   // Welt: saftig grüne Wiese (eingefärbtes Gras-Foto, 5-m-Kacheln)
   const wiese = welt ? tintedTex('grass', 0x587a34) : null; if (wiese) wiese.repeat.set(FW / 5, FD / 5);
