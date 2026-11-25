@@ -100,9 +100,19 @@
     let C2; try { C2 = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 }); } catch (e) { return false; }
     if (C2.sampleRate !== 48000) { try { C2.close(); } catch (e) {} return false; }
     let enc2, ts = 0, hold = 0;
+    // 5 Opus-Pakete (100 ms) zu einer Nachricht bündeln: weniger Nachrichten = weniger Stocken über die Spielverbindung
+    const pend = [];
+    const flush = () => {
+      if (!pend.length) return;
+      let n = 0; for (const p of pend) n += 2 + p.length;
+      const out = new Uint8Array(n); let k = 0;
+      for (const p of pend) { out[k++] = p.length >> 8; out[k++] = p.length & 255; out.set(p, k); k += p.length; }
+      pend.length = 0;
+      try { net.send({ t: 'vc', o: 2, d: out }); } catch (e) {}
+    };
     try {
       enc2 = new AudioEncoder({
-        output: ch => { const b = new Uint8Array(ch.byteLength); ch.copyTo(b); try { net.send({ t: 'vc', o: 1, d: b }); } catch (e) {} },
+        output: ch => { const b = new Uint8Array(ch.byteLength); ch.copyTo(b); pend.push(b); if (pend.length >= 5) flush(); },
         error: () => { VC.opusBroken = true; },
       });
       enc2.configure(Object.assign({ opus: { frameDuration: 20000, complexity: 8, application: 'voip' } }, OPUS_CFG));
@@ -114,6 +124,7 @@
       if (!VC.sending || typeof net !== 'object' || VC.opusBroken) { ts += dur; return; }
       let rms = 0; for (let i = 0; i < inp.length; i += 2) rms += inp[i] * inp[i]; rms = Math.sqrt(rms / (inp.length / 2));
       const now = performance.now(); if (rms > 0.004) hold = now + 450;   // nach dem Sprechen noch kurz weiter senden: keine abgeschnittenen Silben
+      if (now >= hold && pend.length) flush();   // Satzende: Rest sofort schicken
       if (now < hold) { try { const ad = new AudioData({ format: 'f32-planar', sampleRate: 48000, numberOfFrames: inp.length, numberOfChannels: 1, timestamp: ts, data: new Float32Array(inp) }); enc2.encode(ad); ad.close(); } catch (err) {} }
       ts += dur;
     };
@@ -152,16 +163,24 @@
     let o = VC.rx[id]; if (!o) { o = VC.rx[id] = { g: C.createGain(), t: 0 }; o.g.connect(C.destination); }
     o.g.gain.value = VC.vol;
     const buf = C.createBuffer(1, ch.length, rate); buf.getChannelData(0).set(ch);
-    const t0 = C.currentTime; if (o.t < t0 + 0.02 || o.t > t0 + 0.8) o.t = t0 + 0.14;
+    const t0 = C.currentTime; if (o.t < t0 + 0.02 || o.t > t0 + 1.0) o.t = t0 + 0.22;   // Puffer gegen Ruckeln (bei Lücke neu aufbauen)
     const sn = C.createBufferSource(); sn.buffer = buf; sn.connect(o.g); sn.start(o.t); o.t += buf.duration;
   }
   function opusRecv(id, u, C) {
     let o = VC.dec[id];
     if (!o) {
-      o = VC.dec[id] = { ts: 0, d: null };
+      o = VC.dec[id] = { ts: 0, d: null, acc: [], n: 0, rate: 48000, tm: 0 };
       try {
         o.d = new AudioDecoder({
-          output: ad => { try { const f = new Float32Array(ad.numberOfFrames); ad.copyTo(f, { planeIndex: 0, format: 'f32-planar' }); vcPlay(id, f, ad.sampleRate, C); } catch (e) {} ad.close(); },
+          output: ad => {   // Stücke sammeln und als größere Blöcke abspielen (keine Knackser an den 20-ms-Grenzen)
+            try {
+              const f = new Float32Array(ad.numberOfFrames); ad.copyTo(f, { planeIndex: 0, format: 'f32-planar' });
+              o.acc.push(f); o.n += f.length; o.rate = ad.sampleRate;
+              const go = () => { clearTimeout(o.tm); o.tm = 0; if (!o.n) return; const all = new Float32Array(o.n); let k = 0; for (const a of o.acc) { all.set(a, k); k += a.length; } o.acc = []; o.n = 0; vcPlay(id, all, o.rate, C); };
+              if (o.n >= o.rate * 0.1) go(); else if (!o.tm) o.tm = setTimeout(go, 40);
+            } catch (e) {}
+            ad.close();
+          },
           error: () => { delete VC.dec[id]; },
         });
         o.d.configure({ codec: 'opus', sampleRate: 48000, numberOfChannels: 1 });
@@ -176,6 +195,7 @@
     const C = ac(); if (!C) return;
     const u = d instanceof Uint8Array ? d : d instanceof ArrayBuffer ? new Uint8Array(d) : ArrayBuffer.isView(d) ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength) : null;
     if (!u || !u.length) return;
+    if (opus === 2) { if (HAS_OPUS) for (let k = 0; k + 2 <= u.length;) { const n = (u[k] << 8) | u[k + 1]; k += 2; if (!n || k + n > u.length) break; opusRecv(id, u.subarray(k, k + n), C); k += n; } return; }
     if (opus) { if (HAS_OPUS) opusRecv(id, u, C); return; }
     const ch = new Float32Array(u.length); for (let i = 0; i < u.length; i++) ch[i] = DEC[u[i]];
     vcPlay(id, ch, RATE, C);

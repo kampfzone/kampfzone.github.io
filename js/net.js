@@ -134,7 +134,7 @@ function hostHandle(from, m) {
   const P = H.players;
   if (m.t === 'vc') {   // Sprachchat: Ton an alle anderen weiterreichen (voice.js)
     if (!P[from] || !m.d) return;
-    for (const id in H.conns) if (id !== from && H.conns[id].open) H.conns[id].send(m.o ? { t: 'vc', id: from, d: m.d, o: 1 } : { t: 'vc', id: from, d: m.d });
+    for (const id in H.conns) if (id !== from && H.conns[id].open) H.conns[id].send(m.o ? { t: 'vc', id: from, d: m.d, o: m.o } : { t: 'vc', id: from, d: m.d });
     if (from !== myId && window.vcRecv) vcRecv(from, m.d, m.o);
     return;
   }
