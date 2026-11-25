@@ -1053,10 +1053,11 @@ function updateRide(dt) {
   const K = VK[ride.kind || 'moped'], isCar = ride.kind === 'car', isTank = ride.kind === 'tank';
   if (isCar) carDrive(dt, thr, steer, !!keys.Handbrake,!!(touchIn.mx || touchIn.my));   // Auto: Drift-Physik (wie in Drift-Welt)
   else {
-    if (thr > 0) ride.speed += (ride.speed < 0 ? K.brake : K.acc * (1 - ride.speed / K.top)) * thr * dt;
+    const GU = isTank && ride.ctype === 'gustav', kAcc = GU ? 7 : K.acc, kTop = GU ? 41 : K.top, kMax = GU ? 140 / 3.6 : K.max;   // Schwerer Gustav: bis 140 km/h
+    if (thr > 0) ride.speed += (ride.speed < 0 ? K.brake : kAcc * (1 - ride.speed / kTop)) * thr * dt;
     else if (thr < 0) ride.speed += (ride.speed > 0.3 ? -K.brake : -K.acc * 0.45) * -thr * dt;
     else ride.speed -= Math.sign(ride.speed) * Math.min(Math.abs(ride.speed), K.coast * dt);
-    ride.speed = Math.max(K.rev, Math.min(K.max, ride.speed));   // Moped ca. 60 km/h
+    ride.speed = Math.max(K.rev, Math.min(kMax, ride.speed));   // Moped ca. 60 km/h
   }
   // Lenken: bei Tempo weniger stark, rückwärts umgekehrt
   const sp = isCar ? Math.hypot(ride.vel.x, ride.vel.z) : Math.abs(ride.speed);
@@ -1089,7 +1090,7 @@ function updateRide(dt) {
     ride.whT = 0;
   }
   if (isTank && ride.ctype === 'gustav') {   // Schwerer Gustav: fährt nur auf den Schienen, Rohr schwenkt wenig, steigt hoch
-    ride.speed = Math.max(-11, Math.min(11, ride.speed)); ride.lean = 0;
+    ride.speed = Math.max(-11, Math.min(140 / 3.6, ride.speed)); ride.lean = 0;
     ride.yaw += steer * 0.3 * dt * Math.min(1, Math.abs(ride.speed) / 1.5) * Math.sign(ride.speed || 1);   // lenkt nur in der Fahrt (wie ein Zug in der Kurve), legt dabei neue Schienen
     ride.vel.x = Math.cos(ride.yaw) * ride.speed; ride.vel.z = -Math.sin(ride.yaw) * ride.speed;
     let d = (me.yaw + Math.PI / 2 - ride.yaw) - (ride.turret || 0); d = Math.atan2(Math.sin(d), Math.cos(d));

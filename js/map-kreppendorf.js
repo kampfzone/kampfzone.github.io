@@ -30,6 +30,20 @@ function buildKreppendorfMap() {
     for (let i = nb; i < boxes.length; i++) { boxes[i].min.y += y; boxes[i].max.y += y; }
   };
 
+  /* --- Echtes Luftbild (DOP20 Bayern, 20 cm/Pixel) für Boden und Dächer; Feinstruktur aus der Grastextur --- */
+  const DOP = new THREE.TextureLoader().load('textures/kreppendorf-dop20.jpg');
+  DOP.encoding = THREE.sRGBEncoding; DOP.anisotropy = renderer.capabilities.getMaxAnisotropy(); DOP.wrapS = DOP.wrapT = THREE.ClampToEdgeWrapping;
+  const dopUv = (x, z) => [(x + 264) / 528, (264 - z) / 528];
+  const dopMat = (detailScale, detailAmt, extra = {}) => {
+    const m = new THREE.MeshStandardMaterial(Object.assign({ map: DOP, roughness: 0.95, color: new THREE.Color(0.5, 0.5, 0.5) }, extra)), det = tintedTex('grass', 0xffffff);
+    m.onBeforeCompile = sh => { sh.uniforms.detailMap = { value: det };
+      sh.fragmentShader = 'uniform sampler2D detailMap;\n' + sh.fragmentShader.replace('#include <map_fragment>',
+        `vec4 texelColor = mapTexelToLinear(texture2D(map, vUv)); texelColor.rgb = pow(texelColor.rgb, vec3(1.3)) * 1.45;
+         float lum = dot(texelColor.rgb, vec3(0.299, 0.587, 0.114)); texelColor.rgb = max(vec3(0.0), mix(vec3(lum), texelColor.rgb, 1.1));
+         if (texelColor.r > texelColor.g * 1.2 && texelColor.r > texelColor.b * 1.3) texelColor.rgb = vec3(0.09, 0.16, 0.05) * (0.8 + lum);   /* Dachkante im Luftbild -> Rasen */
+         vec3 dd = texture2D(detailMap, vUv * ${detailScale.toFixed(1)}).rgb;
+         texelColor.rgb *= mix(1.0, clamp(dot(dd, vec3(0.333)) * 3.2, 0.25, 1.9), ${detailAmt.toFixed(2)}); diffuseColor *= texelColor;`); };
+    return m; };
   /* --- Materialien --- */
   const qc = hex => { const n = parseInt(hex, 16); return ((n >> 16 & 255) >> 4 << 20) | ((n >> 8 & 255) >> 4 << 12) | ((n & 255) >> 4 << 4); };   // Dachfarben auf 16er-Stufen (weniger Materialien)
   const ROOF_MATS = new Map();
@@ -48,6 +62,7 @@ function buildKreppendorfMap() {
     rail: new THREE.MeshStandardMaterial({ color: 0x3a3a3c, roughness: 0.5, metalness: 0.6 }),
     slab: pbr('concrete', 3, { mat: { color: new THREE.Color(0.7, 0.7, 0.68) } }),
     chimney: pbr('brick', 2, {}),
+    plinth: pbr('concrete', 1.5, { mat: { color: new THREE.Color(0.32, 0.31, 0.3), polygonOffset: true, polygonOffsetFactor: -2 } }),
   };
   const mesh = (pos, uv, mat) => {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
@@ -57,14 +72,15 @@ function buildKreppendorfMap() {
   /* --- Boden: echtes Gras (mit Halmen aus grass.js) auf dem DGM1-Gelände, eingefärbt mit den Farben aus dem Luftbild (Felder, Gärten, Höfe) */
   { const R0 = 264, C = 2, n = R0 * 2 / C, pos = [], uv = [], col = [], idx = [], G = D.gc, raw = atob(G.b), tmp = new THREE.Color();
     for (let i = 0; i <= n; i++) for (let j = 0; j <= n; j++) {
-      const x = -R0 + j * C, z = -R0 + i * C, k = (i * G.n + j) * 3; pos.push(x, H(x, z) + 0.03, z); uv.push(x / 3, z / 3);
+      const x = -R0 + j * C, z = -R0 + i * C, k = (i * G.n + j) * 3; pos.push(x, H(x, z) + 0.03, z); uv.push(...dopUv(x, z));
       tmp.setRGB(raw.charCodeAt(k) / 255, raw.charCodeAt(k + 1) / 255, raw.charCodeAt(k + 2) / 255).convertSRGBToLinear();
       const hsl = {}; tmp.getHSL(hsl); if ((hsl.h < 0.07 || hsl.h > 0.85) && hsl.s > 0.08) { hsl.h = 0.25; hsl.s = 0.45; hsl.l = 0.12; }   // Dächer im Luftbild (rötlich) → Gartenrasen
       tmp.setHSL(hsl.h, Math.min(1, hsl.s * 1.25), Math.min(0.2, hsl.l * 0.6)); col.push(tmp.r * 2.2, tmp.g * 2.2, tmp.b * 2.2);   // durch Grastextur geteilt → echte Farbe
     }
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const a = i * (n + 1) + j, b = a + n + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
-    const m = new THREE.Mesh(withUv2(g), pbr('grass', 3, { map: tintedTex('grass', 0x9a9a9a), mat: { vertexColors: true } })); m.receiveShadow = true; scene.add(m); mapMeshes.push(m); }
+    const gm = dopMat(176, 0.9); gm.userData.grassGround = true;   // stehende Halme (grass.js) wie vorher
+    const m = new THREE.Mesh(withUv2(g), gm); m.receiveShadow = true; scene.add(m); mapMeshes.push(m); }
 
   /* --- Straßen und Wege aus OSM als echte Asphalt-/Schotterbänder (folgen dem Gelände) --- */
   const MR = { road: pbr('asphalt', 3, { mat: { polygonOffset: true, polygonOffsetFactor: -3 } }),
@@ -90,8 +106,8 @@ function buildKreppendorfMap() {
   MR.pave = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g = cv.getContext('2d');
     g.fillStyle = '#6d6862'; g.fillRect(0, 0, 256, 256);
     for (let r = 0; r < 16; r++) for (let c = -1; c < 9; c++) { const l = 150 + ((r * 7 + c * 13) % 5) * 9 - 10; g.fillStyle = `rgb(${l},${l - 4},${l - 10})`; g.fillRect(c * 32 + (r & 1) * 16 + 1, r * 16 + 1, 30, 14); }
-    const tx = new THREE.CanvasTexture(cv); tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.anisotropy = 8; if (THREE.SRGBColorSpace) tx.colorSpace = THREE.SRGBColorSpace;
-    return new THREE.MeshStandardMaterial({ map: tx, color: new THREE.Color(0.24, 0.235, 0.23), roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -3 }); })();
+    const tx = new THREE.CanvasTexture(cv); tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.anisotropy = 8; if (THREE.SRGBColorSpace) tx.colorSpace = THREE.SRGBColorSpace; else tx.encoding = THREE.sRGBEncoding;
+    return new THREE.MeshStandardMaterial({ map: tx, color: new THREE.Color(0.42, 0.41, 0.4), roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -3 }); })();
   const surf = new Map(); for (const r of X.roads) surf.set(Math.round(r.p[0]) + ',' + Math.round(r.p[1]), r);
   const onBridge = (x, z) => BRIDGES.some(b => b.some((p, i) => i + 1 < b.length && segDist(x, z, p, b[i + 1]) < 1));
   const resi = [];
@@ -136,6 +152,9 @@ function buildKreppendorfMap() {
         const proj = ay >= ax && ay >= az ? p => new THREE.Vector2(p.x, p.z) : ax >= az ? p => new THREE.Vector2(p.z, p.y) : p => new THREE.Vector2(p.x, p.y);
         let tris; try { tris = THREE.ShapeUtils.triangulateShape(v.map(proj), []); } catch (e) { continue; }
         const tx = -n.z, tz = n.x, tl = Math.hypot(tx, tz) || 1;
+        if (isRoof && Math.abs(n.y) > 0.15) for (const p of v) {   // Dachüberstand: Ecke 0,55 m vom Hausmittelpunkt weg, auf der Dachebene bleibend
+          const dx = p.x - cxs / cn, dz = p.z - czs / cn, dl = Math.hypot(dx, dz) || 1, ox = dx / dl * 0.55, oz = dz / dl * 0.55;
+          p.x += ox; p.z += oz; p.y -= (n.x * ox + n.z * oz) / n.y; }
         for (const t of tris) for (const k of t) {
           const p = v[k]; P.push(p.x, p.y + base, p.z); top = Math.max(top, p.y);
           if (isRoof) U.push(p.x / 2.5, p.z / 2.5); else U.push((p.x * tx + p.z * tz) / tl / 3, p.y / 3);
@@ -163,6 +182,7 @@ function buildKreppendorfMap() {
     fac.forEach((w, wi) => {
       const { n, t, L, eave, peak, P0 } = w;
       const cols = Math.max(1, Math.floor((L - 1.2) / 2.7)), step = L / cols;
+      if (!small) { quad(M.plinth, P0, t, n, L / 2, -0.4, L, 0.95, 0.02); quad(M.frame, P0, t, n, L / 2, eave - 0.32, L + 0.2, 0.32, 0.25); }   // Sockel + Traufkasten
       const doorCol = !doorDone && wi === 0 ? Math.floor(cols / 2) : -1;
       if (doorCol >= 0) { quad(M.door, P0, t, n, step * (doorCol + 0.5), 0, 1.1, 2.15, 0.05); quad(M.frame, P0, t, n, step * (doorCol + 0.5), 0, 1.35, 2.3, 0.03); doorDone = true; }
       for (let y = 0.95; y + 1.35 < eave - 0.35; y += 2.8) for (let c = 0; c < cols; c++) {

@@ -9,7 +9,7 @@
   if (window.KZ_PORTAL) return;   // Spieleportal: kein Sprachchat mit Fremden
   // mode: 'toggle' = Taste einmal drücken → Mikro bleibt an, bis man nochmal drückt (Standard) · 'ptt' = Taste halten · 'open' = immer an
   // live: Mikro ist eingeschaltet (bleibt gespeichert – auch nach dem Neuladen wieder an)
-  const VC = { on: true, mode: 'toggle', live: false, vol: 1, stream: null, asking: false, denied: false, rx: {}, last: {}, speak: {} };
+  const VC = { on: true, mode: 'toggle', live: false, vol: 1, stream: null, asking: false, denied: false, rx: {}, last: {}, speak: {}, dec: {} };
   try { const s = JSON.parse(localStorage.getItem('kz_voice') || 'null'); if (s) { VC.on = s.on !== false; VC.mode = s.mode || (s.open ? 'open' : 'toggle'); VC.live = !!s.live; VC.vol = s.vol >= 0 ? s.vol : 1; VC.dev = s.dev || ''; } } catch (e) {}
   const save = () => { try { localStorage.setItem('kz_voice', JSON.stringify({ on: VC.on, mode: VC.mode, live: VC.live, vol: VC.vol, dev: VC.dev })); } catch (e) {} };
   // Taste (B) gedrückt: im Modus „an/aus“ umschalten
@@ -93,7 +93,37 @@
   const RATE = 12000;
   const enc = x => { const s = Math.max(-1, Math.min(1, x)); return (s < 0 ? 0x80 : 0) | Math.round(Math.log(1 + 255 * Math.abs(s)) / Math.log(256) * 127); };
   const DEC = new Float32Array(256); for (let v = 0; v < 256; v++) DEC[v] = (v & 0x80 ? -1 : 1) * (Math.pow(256, (v & 0x7f) / 127) - 1) / 255;
+  /* --- Opus (wie Discord/WhatsApp): 48 kHz, ~32 kbit/s, 20-ms-Pakete – viel klarer als μ-law. Browser ohne WebCodecs nehmen weiter μ-law. --- */
+  const OPUS_CFG = { codec: 'opus', sampleRate: 48000, numberOfChannels: 1, bitrate: 32000 };
+  const HAS_OPUS = typeof AudioEncoder === 'function' && typeof AudioDecoder === 'function' && typeof AudioData === 'function' && typeof EncodedAudioChunk === 'function';
+  function startOpus(s) {
+    let C2; try { C2 = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 }); } catch (e) { return false; }
+    if (C2.sampleRate !== 48000) { try { C2.close(); } catch (e) {} return false; }
+    let enc2, ts = 0, hold = 0;
+    try {
+      enc2 = new AudioEncoder({
+        output: ch => { const b = new Uint8Array(ch.byteLength); ch.copyTo(b); try { net.send({ t: 'vc', o: 1, d: b }); } catch (e) {} },
+        error: () => { VC.opusBroken = true; },
+      });
+      enc2.configure(Object.assign({ opus: { frameDuration: 20000, complexity: 8, application: 'voip' } }, OPUS_CFG));
+    } catch (e) { try { C2.close(); } catch (e2) {} return false; }
+    const src = C2.createMediaStreamSource(s), pr = C2.createScriptProcessor(1024, 1, 1), z = C2.createGain(); z.gain.value = 0;
+    src.connect(pr); pr.connect(z); z.connect(C2.destination);
+    pr.onaudioprocess = e => {
+      const inp = e.inputBuffer.getChannelData(0), dur = inp.length / 48000 * 1e6;
+      if (!VC.sending || typeof net !== 'object' || VC.opusBroken) { ts += dur; return; }
+      let rms = 0; for (let i = 0; i < inp.length; i += 2) rms += inp[i] * inp[i]; rms = Math.sqrt(rms / (inp.length / 2));
+      const now = performance.now(); if (rms > 0.004) hold = now + 450;   // nach dem Sprechen noch kurz weiter senden: keine abgeschnittenen Silben
+      if (now < hold) { try { const ad = new AudioData({ format: 'f32-planar', sampleRate: 48000, numberOfFrames: inp.length, numberOfChannels: 1, timestamp: ts, data: new Float32Array(inp) }); enc2.encode(ad); ad.close(); } catch (err) {} }
+      ts += dur;
+    };
+    if (C2.state === 'suspended') { const r = () => C2.resume(); addEventListener('pointerdown', r, { once: true }); addEventListener('keydown', r, { once: true }); }
+    VC.proc = pr; VC.procSrc = src; VC.opusCtx = C2; VC.opusEnc = enc2;
+    return true;
+  }
   function startSend(s) {
+    if (VC.proc) return;
+    if (HAS_OPUS && startOpus(s)) return;
     const C = ac(); if (!C || VC.proc) return;
     try {
       const src = C.createMediaStreamSource(s), pr = C.createScriptProcessor(2048, 1, 1), z = C.createGain(); z.gain.value = 0;
@@ -109,23 +139,48 @@
       VC.proc = pr; VC.procSrc = src;
     } catch (e) {}
   }
-  function stopSend() { if (VC.proc) { try { VC.procSrc.disconnect(); VC.proc.disconnect(); } catch (e) {} VC.proc = null; } }
+  function stopSend() {
+    if (VC.proc) { try { VC.procSrc.disconnect(); VC.proc.disconnect(); } catch (e) {} VC.proc = null; }
+    if (VC.opusEnc) { try { VC.opusEnc.close(); } catch (e) {} VC.opusEnc = null; }
+    if (VC.opusCtx) { try { VC.opusCtx.close(); } catch (e) {} VC.opusCtx = null; }
+  }
+  // Abspielen: Pakete eines Mitspielers lückenlos hintereinander, mit kleinem Puffer gegen Ruckeln
+  function vcPlay(id, ch, rate, C) {
+    let rms = 0; for (let i = 0; i < ch.length; i++) rms += ch[i] * ch[i];
+    const now = performance.now(); VC.last[id] = now;
+    if (Math.sqrt(rms / ch.length) > 0.02) VC.speak[id] = now;
+    let o = VC.rx[id]; if (!o) { o = VC.rx[id] = { g: C.createGain(), t: 0 }; o.g.connect(C.destination); }
+    o.g.gain.value = VC.vol;
+    const buf = C.createBuffer(1, ch.length, rate); buf.getChannelData(0).set(ch);
+    const t0 = C.currentTime; if (o.t < t0 + 0.02 || o.t > t0 + 0.8) o.t = t0 + 0.14;
+    const sn = C.createBufferSource(); sn.buffer = buf; sn.connect(o.g); sn.start(o.t); o.t += buf.duration;
+  }
+  function opusRecv(id, u, C) {
+    let o = VC.dec[id];
+    if (!o) {
+      o = VC.dec[id] = { ts: 0, d: null };
+      try {
+        o.d = new AudioDecoder({
+          output: ad => { try { const f = new Float32Array(ad.numberOfFrames); ad.copyTo(f, { planeIndex: 0, format: 'f32-planar' }); vcPlay(id, f, ad.sampleRate, C); } catch (e) {} ad.close(); },
+          error: () => { delete VC.dec[id]; },
+        });
+        o.d.configure({ codec: 'opus', sampleRate: 48000, numberOfChannels: 1 });
+      } catch (e) { o.d = null; }
+    }
+    if (!o.d) return;
+    try { o.d.decode(new EncodedAudioChunk({ type: 'key', timestamp: o.ts, data: u })); o.ts += 20000; } catch (e) { delete VC.dec[id]; }
+  }
   // Ton von einem Mitspieler (net.js ruft das auf): hintereinander abspielen, mit kleinem Puffer gegen Ruckeln
-  window.vcRecv = (id, d) => {
+  window.vcRecv = (id, d, opus) => {
     if (!VC.on || !d || id === myId) return;
     const C = ac(); if (!C) return;
     const u = d instanceof Uint8Array ? d : d instanceof ArrayBuffer ? new Uint8Array(d) : ArrayBuffer.isView(d) ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength) : null;
     if (!u || !u.length) return;
-    const buf = C.createBuffer(1, u.length, RATE), ch = buf.getChannelData(0); let rms = 0;
-    for (let i = 0; i < u.length; i++) { const v = DEC[u[i]]; ch[i] = v; rms += v * v; }
-    const now = performance.now(); VC.last[id] = now;
-    if (Math.sqrt(rms / u.length) > 0.02) VC.speak[id] = now;
-    let o = VC.rx[id]; if (!o) { o = VC.rx[id] = { g: C.createGain(), t: 0 }; o.g.connect(C.destination); }
-    o.g.gain.value = VC.vol;
-    const t0 = C.currentTime; if (o.t < t0 + 0.02 || o.t > t0 + 0.7) o.t = t0 + 0.12;
-    const sn = C.createBufferSource(); sn.buffer = buf; sn.connect(o.g); sn.start(o.t); o.t += buf.duration;
+    if (opus) { if (HAS_OPUS) opusRecv(id, u, C); return; }
+    const ch = new Float32Array(u.length); for (let i = 0; i < u.length; i++) ch[i] = DEC[u[i]];
+    vcPlay(id, ch, RATE, C);
   };
-  function hangAll() { for (const id in VC.rx) { try { VC.rx[id].g.disconnect(); } catch (e) {} } VC.rx = {}; VC.speak = {}; }
+  function hangAll() { for (const id in VC.rx) { try { VC.rx[id].g.disconnect(); } catch (e) {} } VC.rx = {}; VC.speak = {}; for (const id in VC.dec) { try { VC.dec[id].d.close(); } catch (e) {} } VC.dec = {}; }
   function level(o) { o.an.getByteTimeDomainData(o.buf); let s = 0; for (let i = 0; i < o.buf.length; i += 4) { const v = (o.buf[i] - 128) / 128; s += v * v; } return Math.sqrt(s / (o.buf.length / 4)); }
 
   /* --- Takt: Sprechen an/aus, neue Mitspieler anrufen, Anzeige --- */

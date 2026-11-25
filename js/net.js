@@ -134,8 +134,8 @@ function hostHandle(from, m) {
   const P = H.players;
   if (m.t === 'vc') {   // Sprachchat: Ton an alle anderen weiterreichen (voice.js)
     if (!P[from] || !m.d) return;
-    for (const id in H.conns) if (id !== from && H.conns[id].open) H.conns[id].send({ t: 'vc', id: from, d: m.d });
-    if (from !== myId && window.vcRecv) vcRecv(from, m.d);
+    for (const id in H.conns) if (id !== from && H.conns[id].open) H.conns[id].send(m.o ? { t: 'vc', id: from, d: m.d, o: 1 } : { t: 'vc', id: from, d: m.d });
+    if (from !== myId && window.vcRecv) vcRecv(from, m.d, m.o);
     return;
   }
   if (m.t === 'join') {
@@ -397,7 +397,7 @@ function updateBots(dt, now) {
 /* ---------- Client-Logik (läuft bei allen, auch beim Host) ---------- */
 const radarPing = {};
 function clientHandle(m) {
-  if (m.t === 'vc') { if (window.vcRecv) vcRecv(m.id, m.d); return; }   // Sprachchat (voice.js)
+  if (m.t === 'vc') { if (window.vcRecv) vcRecv(m.id, m.d, m.o); return; }   // Sprachchat (voice.js)
   if (m.t === 'welcome') {
     // Host spielt eine andere Karte → diese laden und automatisch wieder beitreten
     if (m.map && m.map !== MAP_ID) {
