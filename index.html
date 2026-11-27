@@ -79,7 +79,7 @@
   #hitmarker:before, #hitmarker:after { content: ""; position: absolute; left: 12px; top: 0; width: 2px; height: 26px; background: #fff; }
   #hitmarker:before { transform: rotate(45deg); } #hitmarker:after { transform: rotate(-45deg); }
   #hitmarker.head:before, #hitmarker.head:after { background: #ff4040; }
-  #scope { position: absolute; inset: 0; background: radial-gradient(circle at center, transparent 0, transparent 34vmin, #000 34.3vmin); }
+  #scope { position: absolute; inset: 0; background: radial-gradient(circle at center, transparent 0, transparent 38vmin, #000 38.3vmin, #000 39.5vmin, rgba(0,0,0,0.55) 41vmin, rgba(0,0,0,0.7) 100%); }   /* Ring schwarz, außen halb durchsichtig: man sieht die Umgebung noch */
   #scope:before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: #000; }
   #scope:after { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: #000; }
   #dmgFlash { position: absolute; inset: 0; box-shadow: inset 0 0 160px rgba(255,0,0,.85); opacity: 0; transition: opacity .25s; }
@@ -674,30 +674,30 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/BufferGeometryUtils.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="js/lang-en.js?v=20261127-173337"></script>
-<script src="js/lang.js?v=20261127-173337"></script>
+<script src="js/lang-en.js?v=20261127-175650"></script>
+<script src="js/lang.js?v=20261127-175650"></script>
 <script>{ let m = 'tokio'; try { m = new URLSearchParams(location.search).get('map') || localStorage.getItem('kz_map') || 'tokio'; } catch (e) {}   // echte Orte: nur die Daten der gewählten Karte laden
-  if (m === 'kreppendorf' || m === 'sonnenhof') document.write(`<script src="js/${m}-data.js?v=20261127-173337"><\/script><script src="js/${m}-extra.js?v=20261127-173337"><\/script>`); }</script><script src="js/core.js?v=20261127-173337"></script>
-<script src="js/map-kreppendorf.js?v=20261127-173337"></script><script src="js/map.js?v=20261127-173337"></script>
-<script src="js/models.js?v=20261127-173337"></script>
-<script src="js/game.js?v=20261127-173337"></script>
-<script src="js/ladder.js?v=20261127-173337"></script>
-<script src="js/vehicles.js?v=20261127-173337"></script>
-<script src="js/net.js?v=20261127-173337"></script>
-<script src="js/ui.js?v=20261127-173337"></script>
-<script src="js/jobs.js?v=20261127-173337"></script>
-<script src="js/gamepad.js?v=20261127-173337"></script>
-<script src="js/keybinds.js?v=20261127-173337"></script>
-<script src="js/tuning.js?v=20261127-173337"></script>
-<script src="js/gunshop.js?v=20261127-173337"></script>
-<script src="js/attach.js?v=20261127-173337"></script>
-<script src="js/boerse.js?v=20261127-173337"></script>
-<script src="js/grass.js?v=20261127-173337"></script>
-<script src="js/record.js?v=20261127-173337"></script>
-<script src="js/postfx.js?v=20261127-173337"></script>
-<script src="js/sfx.js?v=20261127-173337"></script>
-<script src="js/voice.js?v=20261127-173337"></script>
-<script src="js/crazy.js?v=20261127-173337"></script>
+  if (m === 'kreppendorf' || m === 'sonnenhof') document.write(`<script src="js/${m}-data.js?v=20261127-175650"><\/script><script src="js/${m}-extra.js?v=20261127-175650"><\/script>`); }</script><script src="js/core.js?v=20261127-175650"></script>
+<script src="js/map-kreppendorf.js?v=20261127-175650"></script><script src="js/map.js?v=20261127-175650"></script>
+<script src="js/models.js?v=20261127-175650"></script>
+<script src="js/game.js?v=20261127-175650"></script>
+<script src="js/ladder.js?v=20261127-175650"></script>
+<script src="js/vehicles.js?v=20261127-175650"></script>
+<script src="js/net.js?v=20261127-175650"></script>
+<script src="js/ui.js?v=20261127-175650"></script>
+<script src="js/jobs.js?v=20261127-175650"></script>
+<script src="js/gamepad.js?v=20261127-175650"></script>
+<script src="js/keybinds.js?v=20261127-175650"></script>
+<script src="js/tuning.js?v=20261127-175650"></script>
+<script src="js/gunshop.js?v=20261127-175650"></script>
+<script src="js/attach.js?v=20261127-175650"></script>
+<script src="js/boerse.js?v=20261127-175650"></script>
+<script src="js/grass.js?v=20261127-175650"></script>
+<script src="js/record.js?v=20261127-175650"></script>
+<script src="js/postfx.js?v=20261127-175650"></script>
+<script src="js/sfx.js?v=20261127-175650"></script>
+<script src="js/voice.js?v=20261127-175650"></script>
+<script src="js/crazy.js?v=20261127-175650"></script>
 <script>
 // Als App installieren: Chrome/Edge (PC, Android) zeigen ihr Installieren-Fenster, iPhone/iPad bekommen eine Anleitung
 (function () {
