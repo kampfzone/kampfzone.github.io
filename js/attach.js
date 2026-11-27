@@ -13,7 +13,27 @@ const ATT_SLOTS = [
     { id: '', n: 'Kimme & Korn', d: 'Standard', p: 0 },
     { id: 'red', n: 'Rotpunkt', d: 'Streuung −15 %', p: 2500, m: { spread: 0.85 } },
     { id: 'holo', n: 'Holo-Visier', d: 'mehr Zoom beim Zielen · Streuung −20 %', p: 3500, m: { spread: 0.8, zoom: 0.85 } },
-    { id: 'acog', n: '4×-Zielfernrohr', d: 'starker Zoom · Streuung −30 % · im Laufen ungenauer', p: 6000, m: { spread: 0.7, move: 1.25, zoom: 0.55 } }] },
+    { id: 'acog', n: '4×-Zielfernrohr', d: 'starker Zoom · Streuung −30 % · im Laufen ungenauer', p: 6000, m: { spread: 0.7, move: 1.25, zoom: 0.55 } },
+    { id: 'x8', n: '8×-Zielfernrohr', d: 'sehr starker Zoom · Streuung −40 % · im Laufen viel ungenauer', p: 9000, m: { spread: 0.6, move: 1.45, zoom: 0.36 } }] },
+  { k: 'brl', n: 'Lauf', o: [
+    { id: '', n: 'Standard', d: 'Standard', p: 0 },
+    { id: 'long', n: 'Langer Lauf', d: 'Schaden +10 %, Streuung −15 % · im Laufen ungenauer', p: 4500, m: { dmg: 1.1, spread: 0.85, move: 1.15 } },
+    { id: 'short', n: 'Kurzer Lauf', d: 'im Laufen genauer (−25 %) · Schaden −5 %', p: 3500, m: { move: 0.75, dmg: 0.95 } },
+    { id: 'heavy', n: 'Schwerer Lauf', d: 'Schaden +18 % · Rückstoß +15 %', p: 7000, m: { dmg: 1.18, kick: 1.15 } }] },
+  { k: 'stk', n: 'Schaft', o: [
+    { id: '', n: 'Standard', d: 'Standard', p: 0 },
+    { id: 'tac', n: 'Taktischer Schaft', d: 'Rückstoß −20 %', p: 3500, m: { kick: 0.8 } },
+    { id: 'light', n: 'Leichter Schaft', d: 'im Laufen genauer (−20 %) · Rückstoß +10 %', p: 3000, m: { move: 0.8, kick: 1.1 } },
+    { id: 'sniper', n: 'Präzisionsschaft', d: 'Streuung −20 % · Nachladen 10 % langsamer', p: 5000, m: { spread: 0.8, reload: 1.1 } }] },
+  { k: 'ammo', n: 'Munition', o: [
+    { id: '', n: 'Standard', d: 'Standard', p: 0 },
+    { id: 'hp', n: 'Hohlspitz', d: 'Schaden +15 % · Kopfschuss-Bonus etwas kleiner', p: 5000, m: { dmg: 1.15, head: 0.9 } },
+    { id: 'match', n: 'Match-Munition', d: 'Streuung −25 %', p: 4500, m: { spread: 0.75 } },
+    { id: 'head', n: 'Scharfschützen-Munition', d: 'Kopfschuss +30 % · Feuerrate 10 % langsamer', p: 6500, m: { head: 1.3, rate: 1.1 } }] },
+  { k: 'trg', n: 'Abzug', o: [
+    { id: '', n: 'Standard', d: 'Standard', p: 0 },
+    { id: 'fast', n: 'Schnellabzug', d: 'Feuerrate +15 % · Rückstoß +10 %', p: 6000, m: { rate: 0.87, kick: 1.1 } },
+    { id: 'match', n: 'Match-Abzug', d: 'Streuung −15 % · Feuerrate 5 % langsamer', p: 4000, m: { spread: 0.85, rate: 1.05 } }] },
   { k: 'grip', n: 'Griff', o: [
     { id: '', n: 'Ohne', d: 'Standard', p: 0 },
     { id: 'vert', n: 'Vertikalgriff', d: 'Rückstoß −25 %', p: 2500, m: { kick: 0.75 } },
@@ -32,9 +52,15 @@ const ATT_SLOTS = [
     { id: 'green', n: 'Oliv', d: '', p: 2000, c: 0x5c6b3c },
     { id: 'red', n: 'Rot', d: '', p: 2000, c: 0x9c1d1d },
     { id: 'arctic', n: 'Arktis', d: '', p: 2500, c: 0xdfe3e7 },
-    { id: 'gold', n: 'Gold', d: '', p: 15000, c: 0xd9a838, gold: true }] },
+    { id: 'blue', n: 'Blau', d: '', p: 2000, c: 0x1f4f9c },
+    { id: 'purple', n: 'Lila', d: '', p: 2500, c: 0x5b2a86 },
+    { id: 'pink', n: 'Pink', d: '', p: 2500, c: 0xd9548f },
+    { id: 'orange', n: 'Orange', d: '', p: 2500, c: 0xd96d1c },
+    { id: 'chrome', n: 'Chrom', d: '', p: 10000, c: 0xc8ccd2, gold: true },
+    { id: 'gold', n: 'Gold', d: '', p: 15000, c: 0xd9a838, gold: true },
+    { id: 'diamond', n: 'Diamant', d: '', p: 40000, c: 0x8fe3f5, gold: true }] },
 ];
-const ATT_BASE = WEAPONS.map(w => ({ dmg: w.dmg, kick: w.kick, spread: w.spread, move: w.move, mag: w.mag, reload: w.reload, zoom: w.zoom }));
+const ATT_BASE = WEAPONS.map(w => ({ dmg: w.dmg, kick: w.kick, spread: w.spread, move: w.move, mag: w.mag, reload: w.reload, zoom: w.zoom, rate: w.rate, head: w.head }));
 const ATT = { owned: {}, eq: {} };
 try { const s = JSON.parse(localStorage.getItem('kz_attach') || 'null'); if (s) { ATT.owned = s.owned || {}; ATT.eq = s.eq || {}; } } catch (e) {}
 const attSave = () => { try { localStorage.setItem('kz_attach', JSON.stringify({ owned: ATT.owned, eq: ATT.eq })); } catch (e) {} };
@@ -85,7 +111,7 @@ function attParts(i, gi, top) {
     else if (eq.opt === 'holo') { const y = b + 0.03; P.push(box(0.034, 0.014, 0.08, M.metal, 0, b + 0.007, -0.06), box(0.05, 0.006, 0.07, M.metal, 0, b + 0.014, -0.06),
       box(0.005, 0.034, 0.012, M.metal, -0.024, y, -0.09), box(0.005, 0.034, 0.012, M.metal, 0.024, y, -0.09), box(0.053, 0.005, 0.012, M.metal, 0, y + 0.018, -0.09),
       box(0.005, 0.03, 0.01, M.metal, -0.024, y - 0.002, -0.035), box(0.005, 0.03, 0.01, M.metal, 0.024, y - 0.002, -0.035), dot(y, -0.09, 0.0012)); sight = y; }
-    else if (eq.opt === 'acog') { const y = b + 0.034; P.push(box(0.03, 0.016, 0.09, M.metal, 0, b + 0.008, -0.06), tube(0.02, 0.15, -0.06, y), tube(0.025, 0.04, -0.155, y), ring(0.02, y, 0.015), ring(0.025, y, -0.175),
+    else if (eq.opt === 'acog' || eq.opt === 'x8') { const y = b + 0.034; P.push(box(0.03, 0.016, 0.09, M.metal, 0, b + 0.008, -0.06), tube(0.02, 0.15, -0.06, y), tube(0.025, 0.04, -0.155, y), ring(0.02, y, 0.015), ring(0.025, y, -0.175), ...(eq.opt === 'x8' ? [tube(0.032, 0.07, -0.205, y), ring(0.032, y, -0.24)] : []),   // 8×: dickes Objektiv vorne
       box(0.0012, 0.03, 0.0008, M.dark, 0, y - 0.012, -0.12), box(0.016, 0.0012, 0.0008, M.dark, 0, y, -0.12), dot(y + 0.002, -0.12, 0.001)); sight = y; }
   }
   const fo = gi.fore || [0, 0, -0.3];
@@ -168,7 +194,9 @@ tryShoot = function (now) {
       return `<div>${n}<div class="bar"><i class="${Math.abs(diff) < 0.001 ? '' : diff > 0 ? 'up' : 'dn'}" style="width:${pct}%"></i></div></div>`; };
     $('attStats').innerHTML = row('Schaden', w.dmg * w.pellets / 100, b.dmg * w.pellets / 100) + row('Stabilität (wenig Rückstoß)', 1 - w.kick * 8, 1 - b.kick * 8)
       + row('Genauigkeit', 1 - w.spread * 6, 1 - b.spread * 6) + row('Magazin', w.mag / 120, b.mag / 120) + row('Nachladen (schnell)', 1 - w.reload / 6, 1 - b.reload / 6)
-      + row('Zoom beim Zielen', 1 - w.zoom / 90, 1 - b.zoom / 90);
+      + row('Zoom beim Zielen', 1 - w.zoom / 90, 1 - b.zoom / 90)
+      + row('Feuerrate', Math.min(1, 0.06 / w.rate), Math.min(1, 0.06 / b.rate)) + row('Kopfschuss-Bonus', w.head / 4, b.head / 4)
+      + row('Genauigkeit im Laufen', 1 - w.move * 12, 1 - b.move * 12);
   }
   function render() {
     const ids = weapons(); if (!ids.includes(cur)) cur = ids[0];
