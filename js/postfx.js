@@ -59,6 +59,24 @@
       vec2 d = vUv - 0.5; c *= 1.0 - uVig * dot(d, d) * 1.7;              // Randabdunklung
       gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
     }`);
+  // Ultra: Umgebungsverdeckung aus dem Tiefenbild (Ecken, Fugen, Fuß von Wänden/Bäumen werden dunkler)
+  const aoMat = mk({ tDepth: { value: null }, uPx: { value: new THREE.Vector2() }, uNear: { value: 0.1 }, uFar: { value: 1000 } },
+    `uniform sampler2D tDepth; uniform vec2 uPx; uniform float uNear, uFar; varying vec2 vUv;
+    float lin(vec2 uv) { float z = texture2D(tDepth, uv).x * 2.0 - 1.0; return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
+    void main() {
+      float d = lin(vUv); if (d > uFar * 0.9) { gl_FragColor = vec4(1.0); return; }
+      float r = clamp(28.0 / d, 3.0, 40.0), ao = 0.0;
+      for (int i = 0; i < 12; i++) {
+        float a = float(i) * 2.399 + fract(sin(dot(vUv, vec2(12.9898, 78.233))) * 43758.5) * 6.283, s = (float(i) + 1.0) / 12.0;
+        float sd = lin(vUv + vec2(cos(a), sin(a)) * uPx * r * s);
+        float diff = d - sd; ao += smoothstep(0.03, 0.4, diff) * (1.0 - smoothstep(0.6, 2.5, diff));
+      }
+      gl_FragColor = vec4(vec3(1.0 - ao / 12.0 * 0.9), 1.0);
+    }`);
+  const aoBlurMat = mk({ tDiffuse: { value: null }, tScene: { value: null }, uPx: { value: new THREE.Vector2() } }, `uniform sampler2D tDiffuse, tScene; uniform vec2 uPx; varying vec2 vUv;
+    void main() { float a = 0.0; for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++) a += texture2D(tDiffuse, vUv + vec2(float(x), float(y)) * uPx * 1.5).r;
+      gl_FragColor = vec4(texture2D(tScene, vUv).rgb * mix(1.0, a / 9.0, 0.85), 1.0); }`);
+  let rtAO = null, rtAO2 = null;
   function makeRT(w, h, multi) {
     const o = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, encoding: THREE.sRGBEncoding, depthBuffer: !!multi || multi === null, stencilBuffer: false, generateMipmaps: false };
     if (multi && isGL2 && THREE.WebGLMultisampleRenderTarget) { const rt = new THREE.WebGLMultisampleRenderTarget(w, h, o); rt.samples = 4; return rt; }
@@ -66,11 +84,17 @@
   }
   function ensure(level) {
     renderer.getDrawingBufferSize(sz);
-    const w = sz.x | 0, h = sz.y | 0, wantMs = gfx === 'high';   // echte Kantenglättung (teuer) nur in „Hoch“, sonst FXAA
-    if (rtScene && w === W && h === H && ms === wantMs) return;
-    for (const r of [rtScene, rtA, rtB]) if (r) r.dispose();
-    W = w; H = h; ms = wantMs;
+    const ultra = !!window.KZ_ULTRA && isGL2, w = sz.x | 0, h = sz.y | 0, wantMs = gfx === 'high' && !ultra;   // echte Kantenglättung (teuer) nur in „Hoch“, sonst FXAA
+    const key = wantMs ? 1 : ultra ? 2 : 0;
+    if (rtScene && w === W && h === H && ms === key) return;
+    for (const r of [rtScene, rtA, rtB, rtAO, rtAO2]) if (r) r.dispose();
+    W = w; H = h; ms = key; rtAO = rtAO2 = null;
     rtScene = makeRT(w, h, wantMs ? true : null);
+    if (ultra) {
+      rtScene.depthTexture = new THREE.DepthTexture(w, h); rtScene.depthTexture.type = THREE.UnsignedIntType;
+      rtAO = makeRT(w >> 1, h >> 1, false); rtAO2 = makeRT(w, h, false);
+      aoMat.uniforms.uPx.value.set(1 / w, 1 / h); aoBlurMat.uniforms.uPx.value.set(2 / w, 2 / h);
+    }
     const bw = Math.max(16, w >> 2), bh = Math.max(16, h >> 2);
     rtA = makeRT(bw, bh, false); rtB = makeRT(bw, bh, false);
     brightMat.uniforms.uPx.value.set(1 / w, 1 / h); finalMat.uniforms.uPx.value.set(1 / w, 1 / h);
@@ -81,16 +105,21 @@
     if (!level) { renderer.render(scene, camera); return; }
     ensure(level);
     renderer.setRenderTarget(rtScene); renderer.render(scene, camera);
+    let src = rtScene;
+    if (rtAO) {
+      aoMat.uniforms.tDepth.value = rtScene.depthTexture; aoMat.uniforms.uNear.value = camera.near; aoMat.uniforms.uFar.value = camera.far; pass(aoMat, rtAO);
+      aoBlurMat.uniforms.tDiffuse.value = rtAO.texture; aoBlurMat.uniforms.tScene.value = rtScene.texture; pass(aoBlurMat, rtAO2); src = rtAO2;
+    }
     const bloom = level >= 2;
     if (bloom) {
-      brightMat.uniforms.tDiffuse.value = rtScene.texture; pass(brightMat, rtA);
+      brightMat.uniforms.tDiffuse.value = src.texture; pass(brightMat, rtA);
       const px = 1 / rtA.width, py = 1 / rtA.height;
       for (const k of [1, 2]) {   // zweimal: weiches, breites Leuchten
         blurMat.uniforms.tDiffuse.value = rtA.texture; blurMat.uniforms.uDir.value.set(px * k, 0); pass(blurMat, rtB);
         blurMat.uniforms.tDiffuse.value = rtB.texture; blurMat.uniforms.uDir.value.set(0, py * k); pass(blurMat, rtA);
       }
     }
-    finalMat.uniforms.tScene.value = rtScene.texture; finalMat.uniforms.tBloom.value = rtA.texture; finalMat.uniforms.uBloom.value = bloom ? 0.55 : 0;
+    finalMat.uniforms.tScene.value = src.texture; finalMat.uniforms.tBloom.value = rtA.texture; finalMat.uniforms.uBloom.value = bloom ? 0.55 : 0;
     finalMat.uniforms.uFxaa.value = rtScene.isWebGLMultisampleRenderTarget ? 0 : 1;
     pass(finalMat, null);
   };

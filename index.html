@@ -569,7 +569,7 @@
     <label>Lautstärke: <span id="volVal"></span></label>
     <input id="volIn" type="range" min="0" max="1" step="0.05">
     <label for="gfxIn">Grafik</label>
-    <select id="gfxIn"><option value="high">Hoch (schärfste Grafik)</option><option value="medium">Mittel (empfohlen)</option><option value="perf">Leistung (fast wie Mittel, mehr FPS)</option><option value="clean">Klar &amp; schnell (gute Grafik, ohne Bäume/Gras – viele FPS)</option><option value="low">Niedrig (keine Schatten, am flüssigsten)</option><option value="potato">Sehr niedrig (für schwache PCs)</option></select>
+    <select id="gfxIn"><option value="ultra">Ultra (realistisch, starker PC)</option><option value="high">Hoch (schärfste Grafik)</option><option value="medium">Mittel (empfohlen)</option><option value="perf">Leistung (fast wie Mittel, mehr FPS)</option><option value="clean">Klar &amp; schnell (gute Grafik, ohne Bäume/Gras – viele FPS)</option><option value="low">Niedrig (keine Schatten, am flüssigsten)</option><option value="potato">Sehr niedrig (für schwache PCs)</option></select>
     <button id="btnFs" class="sec">⛶ Vollbild-Modus: AUS</button>
     <div id="fsHint" class="hidden" style="font-size:12.5px;line-height:1.45;color:#ffe9a8;background:rgba(255,204,51,.1);border:1px solid #6a5a2a;border-radius:8px;padding:8px 10px;margin-top:6px"></div>
     <button id="btnFps" class="sec">📊 FPS-Anzeige: AN</button>
@@ -672,31 +672,32 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/BufferGeometryUtils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="js/lang-en.js?v=20261127-162258"></script>
-<script src="js/lang.js?v=20261127-162258"></script>
+<script src="js/lang-en.js?v=20261127-165946"></script>
+<script src="js/lang.js?v=20261127-165946"></script>
 <script>{ let m = 'tokio'; try { m = new URLSearchParams(location.search).get('map') || localStorage.getItem('kz_map') || 'tokio'; } catch (e) {}   // echte Orte: nur die Daten der gewählten Karte laden
-  if (m === 'kreppendorf' || m === 'sonnenhof') document.write(`<script src="js/${m}-data.js?v=20261127-162258"><\/script><script src="js/${m}-extra.js?v=20261127-162258"><\/script>`); }</script><script src="js/core.js?v=20261127-162258"></script>
-<script src="js/map-kreppendorf.js?v=20261127-162258"></script><script src="js/map.js?v=20261127-162258"></script>
-<script src="js/models.js?v=20261127-162258"></script>
-<script src="js/game.js?v=20261127-162258"></script>
-<script src="js/ladder.js?v=20261127-162258"></script>
-<script src="js/vehicles.js?v=20261127-162258"></script>
-<script src="js/net.js?v=20261127-162258"></script>
-<script src="js/ui.js?v=20261127-162258"></script>
-<script src="js/jobs.js?v=20261127-162258"></script>
-<script src="js/gamepad.js?v=20261127-162258"></script>
-<script src="js/keybinds.js?v=20261127-162258"></script>
-<script src="js/tuning.js?v=20261127-162258"></script>
-<script src="js/gunshop.js?v=20261127-162258"></script>
-<script src="js/attach.js?v=20261127-162258"></script>
-<script src="js/boerse.js?v=20261127-162258"></script>
-<script src="js/grass.js?v=20261127-162258"></script>
-<script src="js/record.js?v=20261127-162258"></script>
-<script src="js/postfx.js?v=20261127-162258"></script>
-<script src="js/sfx.js?v=20261127-162258"></script>
-<script src="js/voice.js?v=20261127-162258"></script>
-<script src="js/crazy.js?v=20261127-162258"></script>
+  if (m === 'kreppendorf' || m === 'sonnenhof') document.write(`<script src="js/${m}-data.js?v=20261127-165946"><\/script><script src="js/${m}-extra.js?v=20261127-165946"><\/script>`); }</script><script src="js/core.js?v=20261127-165946"></script>
+<script src="js/map-kreppendorf.js?v=20261127-165946"></script><script src="js/map.js?v=20261127-165946"></script>
+<script src="js/models.js?v=20261127-165946"></script>
+<script src="js/game.js?v=20261127-165946"></script>
+<script src="js/ladder.js?v=20261127-165946"></script>
+<script src="js/vehicles.js?v=20261127-165946"></script>
+<script src="js/net.js?v=20261127-165946"></script>
+<script src="js/ui.js?v=20261127-165946"></script>
+<script src="js/jobs.js?v=20261127-165946"></script>
+<script src="js/gamepad.js?v=20261127-165946"></script>
+<script src="js/keybinds.js?v=20261127-165946"></script>
+<script src="js/tuning.js?v=20261127-165946"></script>
+<script src="js/gunshop.js?v=20261127-165946"></script>
+<script src="js/attach.js?v=20261127-165946"></script>
+<script src="js/boerse.js?v=20261127-165946"></script>
+<script src="js/grass.js?v=20261127-165946"></script>
+<script src="js/record.js?v=20261127-165946"></script>
+<script src="js/postfx.js?v=20261127-165946"></script>
+<script src="js/sfx.js?v=20261127-165946"></script>
+<script src="js/voice.js?v=20261127-165946"></script>
+<script src="js/crazy.js?v=20261127-165946"></script>
 <script>
 // Als App installieren: Chrome/Edge (PC, Android) zeigen ihr Installieren-Fenster, iPhone/iPad bekommen eine Anleitung
 (function () {

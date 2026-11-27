@@ -2254,7 +2254,14 @@ function forestExtras(LX, LZ, LR) {
       const s = srand() < 0.8 ? srnd(0.25, 0.7) : srnd(0.8, 1.6), y = hillH(x, z);
       place(R, n++, x, y + s * 0.2, z, s * srnd(1, 1.4), s * srnd(0.5, 0.8), s * srnd(1, 1.4), srand() * 6, srand() * 0.5);
       if (s > 0.75) collider(x, y - 0.3, z, s * 1.6, s * 0.9, s * 1.6); }
-    R.count = n; R.castShadow = true; R.receiveShadow = true; scene.add(R); }
+    R.count = n; R.castShadow = true; R.receiveShadow = true; scene.add(R);
+    // echte Moos-Steine (Poly Haven, CC0): Form + Fotomaterial ersetzen die Klötze, Positionen bleiben
+    if (THREE.GLTFLoader) new THREE.GLTFLoader().load('assets/ph/rock_moss_set_01.gltf', g => {
+      let m = null; g.scene.traverse(o => { if (o.isMesh && !m) m = o; }); if (!m) return;
+      const geo = m.geometry.clone(); geo.computeBoundingBox(); const b = geo.boundingBox, c = new THREE.Vector3(), sz = new THREE.Vector3();
+      b.getCenter(c); b.getSize(sz); geo.translate(-c.x, -b.min.y - sz.y * 0.3, -c.z); geo.scale(2 / sz.x, 2 / sz.x * 1.4, 2 / sz.z);
+      R.geometry.dispose(); R.geometry = geo; R.material = m.material; R.material.flatShading = false;
+    }); }
   // umgefallene Baumstämme (fest), nur auf flachem Boden
   { const N = 34, L = 6, G = new THREE.CylinderGeometry(0.34, 0.4, L, 10), LG = new THREE.InstancedMesh(G, LOG_MAT, N);
     let n = 0, tries = 0;
@@ -4166,8 +4173,14 @@ function applyGfx(v) {
 }
 let gfx = TOUCH ? 'low' : 'medium';   // Handys starten mit niedriger Grafik
 try { gfx = localStorage.getItem('kz_gfx2') || gfx; } catch (e) {}
-applyGfx(gfx);
-$('gfxIn').onchange = e => applyGfx(e.target.value);
+// „Ultra“ = Hoch + Umgebungsverdeckung (SSAO) + feinere Schatten
+window.KZ_ULTRA = gfx === 'ultra'; if (KZ_ULTRA) gfx = 'high';
+function applyGfxU(v) {
+  window.KZ_ULTRA = v === 'ultra'; applyGfx(KZ_ULTRA ? 'high' : v);
+  if (KZ_ULTRA) { sun.shadow.mapSize.set(4096, 4096); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } sun.shadow.radius = 3; $('gfxIn').value = 'ultra'; try { localStorage.setItem('kz_gfx2', 'ultra'); } catch (e) {} }
+}
+applyGfxU(KZ_ULTRA ? 'ultra' : gfx);
+$('gfxIn').onchange = e => applyGfxU(e.target.value);
 // Startpunkte (auch Wegpunkte der Bots): Straßen, Plätze, Gassen
 const SPAWNS_TOKIO = [[-12, -12], [12, -12], [-12, 12], [12, 12], [0, -40], [0, 40], [-40, 0], [40, 0], [-52, -25], [52, -25], [-52, 25], [52, 25],
   [-25, -52], [25, -52], [-25, 52], [25, 52], [-78, -66], [-26, -75], [-16, -63], [35, -66], [90, -73], [-88, -28], [-74.5, 22], [-14, 30], [24, 22],
