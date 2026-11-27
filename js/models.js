@@ -280,6 +280,19 @@ const GUN_MATS = {
   gloveDark: new THREE.MeshStandardMaterial(Object.assign({ color: 0x24231e, roughness: 0.7 }, GN(0.3))),   // Knöchelschutz, Fingerkuppen
   flame: new THREE.MeshStandardMaterial({ color: 0xff8a20, emissive: 0xff6a10, emissiveIntensity: 2 }),
 };
+// Gebrauchsspuren: Rauheitskarte mit Flecken, Wischspuren und feinen Kratzern (blanke Stellen glänzen) – selbst erzeugt
+(function () {
+  const S = 512, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d');
+  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  g.fillStyle = 'rgb(150,150,150)'; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 900; i++) { const v = 110 + rnd() * 90 | 0; g.fillStyle = `rgba(${v},${v},${v},0.18)`; g.beginPath(); g.arc(rnd() * S, rnd() * S, 4 + rnd() * 26, 0, 7); g.fill(); }   // fleckige Oberfläche (Fett, Abrieb)
+  for (let i = 0; i < 260; i++) { const x = rnd() * S, y = rnd() * S, a = rnd() * 6.3, L = 6 + rnd() * 40; g.strokeStyle = `rgba(40,40,40,${0.25 + rnd() * 0.4})`; g.lineWidth = 0.6 + rnd(); g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * L, y + Math.sin(a) * L); g.stroke(); }   // Kratzer: blank = glatt
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 3);
+  for (const [k, r] of [['metal', 0.75], ['metalDS', 0.75], ['steel', 0.7], ['poly', 1.0], ['polyGrip', 1.0], ['tan', 1.0], ['olive', 1.0]]) { const m = GUN_MATS[k]; m.roughnessMap = t; m.roughness = Math.min(1, m.roughness / 0.59 * r); m.needsUpdate = true; }
+  // Metall wie benutzter Waffenstahl: heller, spiegelt die Umgebung (Kanten blitzen im Licht)
+  for (const k of ['metal', 'metalDS']) { GUN_MATS[k].color.setHex(0x8e939b); GUN_MATS[k].metalness = 0.62; GUN_MATS[k].envMapIntensity = 1.4; }
+  GUN_MATS.steel.color.setHex(0x5a5e66); GUN_MATS.steel.envMapIntensity = 1.4;
+})();
 // Gravuren (hell in das schwarze Metall graviert): ein gemeinsamer Textur-Atlas, eine Zeile pro Schriftzug
 const MARK_TXT = ['SAFE', 'SEMI', 'AUTO', 'M4A1 CARBINE', 'CAL. 5.56 MM', 'W1742863', '9x19', 'P17', 'KZ 47118', '.338 LAPUA MAG', '12 GA. 3" MAG', '7.62x51', 'CAL. 9 MM', '.357 MAGNUM', 'KZ 30521', '5.56 NATO'];
 const MARK_W = [];
