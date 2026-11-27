@@ -1193,7 +1193,7 @@ function updateRide(dt) {
   const [ef0, eu] = wheelieShift(ride.wh || 0, 0.6 - RIDER_BACK, RIDER_UP + 1.5), ef = ef0 + K.eyeF - 0.08;
   const eyeSx = Math.sin(ride.yaw) * K.eyeSide, eyeSz = Math.cos(ride.yaw) * K.eyeSide;
   const eye = new THREE.Vector3(me.pos.x + Math.cos(ride.yaw) * (0.08 + ef) + eyeSx, me.pos.y + (isCar ? K.eyeUp : 1.5 + eu) + Math.sin(performance.now() / 45) * 0.003 * Math.min(1, sp / 4), me.pos.z - Math.sin(ride.yaw) * (0.08 + ef) + eyeSz);  camera.position.lerp(eye, fpK);
-  camera.rotation.set(me.pitch, me.yaw, ride.lean * 0.45 * fpK);
+  camera.rotation.set(me.pitch, me.yaw, ride.lean * ((!ride.kind || ride.kind === 'moped') ? 0.8 : 0.45) * fpK);
   // Schießen und Nachladen während der Fahrt
   const w = WEAPONS[me.weapon], now = performance.now() / 1000;
   me.drawT = Math.max(0, me.drawT - dt); me.inspectT = 0; me.landT = 0; me.shake = Math.max(0, me.shake - dt * 1.6);
@@ -1958,6 +1958,9 @@ function updateVehicles(dt) {
       x = a.position.x + Math.cos(yaw) * K.back; z = a.position.z - Math.sin(yaw) * K.back; y = a.position.y - K.up;
       v.whS = (v.whS || 0) + ((v.wh || 0) - (v.whS || 0)) * Math.min(1, dt * 10); wh = v.whS;
       v.stS = (v.stS || 0) + ((v.st || 0) - (v.stS || 0)) * Math.min(1, dt * 10); st = v.stS;
+      // Fahrer legt sich mit in die Kurve (Körper etwas tiefer als das Moped, wie bei echten Fahrern)
+      v.leanS = (v.leanS || 0) + ((v.lean || 0) - (v.leanS || 0)) * Math.min(1, dt * 8);
+      if (v.kind === 'moped' || !v.kind) { a.rotation.order = 'YXZ'; a.rotation.z = -v.leanS * 1.1; }
     }
     m.steer.rotation.y = st;
     if (isTank) {   // Turm drehen, Rohr heben, Rückstoß nach dem Schuss; danach wie ein Auto behandeln (kein Wheelie)
@@ -2039,7 +2042,7 @@ function updateVehicles(dt) {
     myRider.g.rotation.order = 'YXZ';
     const [sf, su] = wheelieShift(ride.wh || 0, 0.6 - RIDER_BACK, RIDER_UP);
     myRider.g.position.set(me.pos.x + Math.cos(ride.yaw) * sf, me.pos.y + su, me.pos.z - Math.sin(ride.yaw) * sf);
-    myRider.g.rotation.set((ride.pitch || 0) * 0.8 + (ride.wh || 0) * 0.9, ride.yaw - Math.PI / 2, ride.lean * 0.8);
+    myRider.g.rotation.set((ride.pitch || 0) * 0.8 + (ride.wh || 0) * 0.9, ride.yaw - Math.PI / 2, -ride.lean * 1.1);   // Körper legt sich mit (etwas tiefer als das Moped)
     const aiming = riderAiming();
     myRider.flags = 8 | (aiming ? 16 : 0);
     myRider.footDown = Math.abs(ride.speed) < 0.6 && ride.onGround; myRider.steerVis = ride.st || 0;
