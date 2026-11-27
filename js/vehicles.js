@@ -883,7 +883,7 @@ const RIDER_BACK = 0.42, RIDER_UP = 0.1;   // Sitzposition des Fahrers relativ z
 const RIDE_GRAV = 15;   // etwas weniger Schwerkraft fürs Moped = schönere Sprünge
 // Fahrzeug-Eigenschaften: Sitz, Größe, Tempo, Lenkung, Kamera, Ein-/Ausstieg
 const VK = {
-  moped: { name: 'Moped', back: RIDER_BACK, up: RIDER_UP, r: PR, h: 1.3, max: 16.8, acc: 6.5, top: 18, brake: 14, rev: -3.5, coast: 1.6, steer: 2.1, steerHi: 14,
+  moped: { name: 'Moped', back: RIDER_BACK, up: RIDER_UP, r: PR, h: 1.3, max: 16.8, acc: 5, top: 18, brake: 14, rev: -3.5, coast: 1.6, steer: 2.1, steerHi: 14,
     camD: 4.2, camH: 1.55, eyeUp: 1.5, eyeF: 0.08, eyeSide: 0, exitSide: 1.1, exitBack: 1.5, enter: 3.0, farDraw: 70 },
   car: { name: 'Auto', back: 0.1, up: 0, r: 1.25, h: 1.4, max: 32, acc: 8.5, top: 35, brake: 22, rev: -7, coast: 2.6, steer: 1.6, steerHi: 34,
     camD: 7.2, camH: 2.4, eyeUp: 1.08, eyeF: -0.15, eyeSide: -0.38, exitSide: 2.0, exitBack: 3.3, enter: 3.8, farDraw: 140 },
@@ -1050,13 +1050,14 @@ function updateRide(dt) {
   if (touchIn.my) thr = -touchIn.my;
   if (touchIn.mx) steer = -touchIn.mx;
   // Gas / Bremse / Rückwärts
-  const K = VK[ride.kind || 'moped'], isCar = ride.kind === 'car', isTank = ride.kind === 'tank';
+  const K = VK[ride.kind || 'moped'], isCar = ride.kind === 'car', isTank = ride.kind === 'tank', isMop = !ride.kind || ride.kind === 'moped';
   if (isCar) carDrive(dt, thr, steer, !!keys.Handbrake,!!(touchIn.mx || touchIn.my));   // Auto: Drift-Physik (wie in Drift-Welt)
   else {
     const GU = isTank && ride.ctype === 'gustav', kAcc = GU ? 7 : K.acc, kTop = GU ? 41 : K.top, kMax = GU ? 140 / 3.6 : K.max;   // Schwerer Gustav: bis 140 km/h
     if (thr > 0) ride.speed += (ride.speed < 0 ? K.brake : kAcc * (1 - ride.speed / kTop)) * thr * dt;
     else if (thr < 0) ride.speed += (ride.speed > 0.3 ? -K.brake : -K.acc * 0.45) * -thr * dt;
-    else ride.speed -= Math.sign(ride.speed) * Math.min(Math.abs(ride.speed), K.coast * dt);
+    else ride.speed -= Math.sign(ride.speed) * Math.min(Math.abs(ride.speed), (isMop ? 0.7 + 0.005 * ride.speed * ride.speed : K.coast) * dt);   // Moped: Motorbremse + Luftwiderstand
+    if (isMop && thr > 0 && ride.speed > 0) ride.speed -= 0.0035 * ride.speed * ride.speed * dt;   // Fahrtwind bremst oben raus
     ride.speed = Math.max(K.rev, Math.min(kMax, ride.speed));   // Moped ca. 60 km/h
   }
   // Lenken: bei Tempo weniger stark, rückwärts umgekehrt
@@ -1106,6 +1107,20 @@ function updateRide(dt) {
     const pt = Math.max(-0.12, Math.min(0.35, me.pitch + 0.06));
     ride.barrelP = (ride.barrelP || 0) + Math.max(-0.6 * dt, Math.min(0.6 * dt, pt - (ride.barrelP || 0)));
     ride.st = ride.turret;
+  } else if (isMop) {   // Moped mit echter Zweirad-Physik
+    // Lenker folgt der Taste nicht sofort (Hand + Gewicht verlagern)
+    ride.stIn = (ride.stIn || 0) + (steer - (ride.stIn || 0)) * Math.min(1, dt * (Math.abs(steer) > Math.abs(ride.stIn || 0) ? 3.5 : 6));
+    const v = Math.max(sp, 0.01), sIn = ride.stIn * Math.sign(ride.speed || 1);
+    // langsam: enger Lenkeinschlag (Wendekreis ~2,5 m) · schnell: begrenzt durch max. Schräglage 45° (Kurvenkraft = g·tan(Lage))
+    const rateLow = sIn * v / 2.5, rateMax = 9.81 * Math.tan(0.78) / v;
+    let turn = Math.max(-rateMax, Math.min(rateMax, rateLow)) * Math.min(1, sp / 1.2) * (1 - Math.min(0.5, ride.wh * 0.6));
+    if (thr < 0 && sp > 6) turn *= 0.7;   // beim harten Bremsen richtet sich das Moped auf
+    ride.yaw += turn * dt;
+    // Schräglage aus der Fliehkraft: tan(Lage) = v · Drehrate / g, mit Trägheit
+    const leanT = -Math.atan(v * turn / 9.81) * Math.sign(ride.speed || 1);
+    ride.lean += (leanT - ride.lean) * Math.min(1, dt * 4.5);
+    ride.st = (ride.st || 0) + (ride.stIn * (0.08 + 0.4 * Math.max(0, 1 - sp / 7)) - (ride.st || 0)) * Math.min(1, dt * 9);
+    ride.vel.x = Math.cos(ride.yaw) * ride.speed; ride.vel.z = -Math.sin(ride.yaw) * ride.speed;
   } else if (!isCar) {
     const turn = steer * Math.min(1, sp / 3) * (K.steer - Math.min(K.steer * 0.57, sp / K.steerHi)) * Math.sign(ride.speed || 1) * (1 - Math.min(0.5, ride.wh * 0.6));
     ride.yaw += turn * dt;
